@@ -98,7 +98,7 @@ export function Conversation({
           return (
             <div key={m.id} className={cn("flex gap-2.5", mine && "flex-row-reverse")}>
               {!mine ? (
-                <EchoAvatar initials={m.authorInitials} color={m.authorColor} size="xs" />
+                <EchoAvatar initials={m.authorInitials} color={m.authorColor} size="sm" />
               ) : null}
               <div className={cn("max-w-[78%] min-w-0", mine && "items-end text-right")}>
                 {chat.kind === "group" && !mine ? (

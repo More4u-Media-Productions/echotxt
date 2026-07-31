@@ -37,7 +37,7 @@ function ActivityPage() {
       actions={
         unread ? (
           <button
-            onClick={() => markAll.mutate()}
+            onClick={() => markAll.mutate({ all: true })}
             className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold"
           >
             <Check className="h-3.5 w-3.5" /> Mark all read
@@ -62,8 +62,8 @@ function ActivityPage() {
                 className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3.5"
               >
                 <EchoAvatar
-                  initials={item.actorInitials}
-                  color={item.actorColor}
+                  initials={item.actor?.avatar ?? "EC"}
+                  color={item.actor?.color ?? "oklch(0.63 0.13 195)"}
                   size="sm"
                 />
                 <div className="min-w-0 flex-1">
