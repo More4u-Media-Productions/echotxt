@@ -11,6 +11,7 @@ const sizes = {
 export function EchoAvatar({
   initials,
   color,
+  avatarUrl,
   presence,
   size = "md",
   square,
@@ -18,6 +19,7 @@ export function EchoAvatar({
 }: {
   initials: string;
   color: string;
+  avatarUrl?: string | null | undefined;
   presence?: Presence | undefined;
   size?: keyof typeof sizes | undefined;
   square?: boolean | undefined;
