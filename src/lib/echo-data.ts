@@ -40,9 +40,13 @@ export interface EchoMessage {
   authorName: string;
   authorColor: string;
   authorInitials: string;
+  authorAvatarUrl: string | null;
   kind: MessageKind;
   body: string;
   metadata: Record<string, unknown>;
+  attachmentUrl: string | null;
+  attachmentType: string | null;
+  attachmentName: string | null;
   createdAt: string;
   time: string;
   edited: boolean;
