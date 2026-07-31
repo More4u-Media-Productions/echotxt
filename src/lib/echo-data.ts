@@ -61,6 +61,8 @@ export interface EchoChat {
   name: string;
   handle: string;
   avatar: string;
+  avatarUrl: string | null;
+  bannerUrl: string | null;
   color: string;
   members: number;
   memberIds: string[];
