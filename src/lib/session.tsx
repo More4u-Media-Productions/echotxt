@@ -127,6 +127,8 @@ export interface ProfileRow {
   bio: string;
   pronouns: string | null;
   avatar_color: string;
+  avatar_url: string | null;
+  banner_url: string | null;
   presence: Presence;
   last_seen: string;
   created_at: string;
@@ -142,6 +144,8 @@ export function toProfile(row: ProfileRow): EchoProfile {
     pronouns: row.pronouns,
     color: row.avatar_color,
     avatar: initialsOf(displayName),
+    avatarUrl: row.avatar_url ?? null,
+    bannerUrl: row.banner_url ?? null,
     presence: row.presence,
     lastSeen: row.last_seen,
     joined: row.created_at,
