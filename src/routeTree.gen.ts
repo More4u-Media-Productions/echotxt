@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ActivityRouteImport } from './routes/activity'
+import { Route as AuthRouteImport } from './routes/auth'
 import { Route as CallsRouteImport } from './routes/calls'
 import { Route as FriendsRouteImport } from './routes/friends'
 import { Route as ProfileRouteImport } from './routes/profile'
@@ -23,6 +24,11 @@ const IndexRoute = IndexRouteImport.update({
 const ActivityRoute = ActivityRouteImport.update({
   id: '/activity',
   path: '/activity',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/auth',
+  path: '/auth',
   getParentRoute: () => rootRouteImport,
 } as any)
 const CallsRoute = CallsRouteImport.update({
@@ -44,6 +50,7 @@ const ProfileRoute = ProfileRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
+  '/auth': typeof AuthRoute
   '/calls': typeof CallsRoute
   '/friends': typeof FriendsRoute
   '/profile': typeof ProfileRoute
@@ -51,6 +58,7 @@ export interface FileRoutesByFullPath {
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
+  '/auth': typeof AuthRoute
   '/calls': typeof CallsRoute
   '/friends': typeof FriendsRoute
   '/profile': typeof ProfileRoute
@@ -59,21 +67,30 @@ export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/activity': typeof ActivityRoute
+  '/auth': typeof AuthRoute
   '/calls': typeof CallsRoute
   '/friends': typeof FriendsRoute
   '/profile': typeof ProfileRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/activity' | '/calls' | '/friends' | '/profile'
+  fullPaths: '/' | '/activity' | '/auth' | '/calls' | '/friends' | '/profile'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/activity' | '/calls' | '/friends' | '/profile'
-  id: '__root__' | '/' | '/activity' | '/calls' | '/friends' | '/profile'
+  to: '/' | '/activity' | '/auth' | '/calls' | '/friends' | '/profile'
+  id:
+    | '__root__'
+    | '/'
+    | '/activity'
+    | '/auth'
+    | '/calls'
+    | '/friends'
+    | '/profile'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ActivityRoute: typeof ActivityRoute
+  AuthRoute: typeof AuthRoute
   CallsRoute: typeof CallsRoute
   FriendsRoute: typeof FriendsRoute
   ProfileRoute: typeof ProfileRoute
@@ -93,6 +110,13 @@ declare module '@tanstack/react-router' {
       path: '/activity'
       fullPath: '/activity'
       preLoaderRoute: typeof ActivityRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/auth': {
+      id: '/auth'
+      path: '/auth'
+      fullPath: '/auth'
+      preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/calls': {
@@ -122,6 +146,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ActivityRoute: ActivityRoute,
+  AuthRoute: AuthRoute,
   CallsRoute: CallsRoute,
   FriendsRoute: FriendsRoute,
   ProfileRoute: ProfileRoute,

@@ -1,191 +1,91 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
-import {
-  Bell,
-  UserPlus,
-  AtSign,
-  Voicemail as VoicemailIcon,
-  PhoneMissed,
-  BarChart3,
-  ShieldAlert,
-  Users,
-  CheckCheck,
-} from "lucide-react";
-import { toast } from "sonner";
+import { Bell, Check, Trash2 } from "lucide-react";
 import { AppShell, EmptyState } from "@/components/echo/app-shell";
 import { EchoAvatar } from "@/components/echo/avatar";
-import { activity, type ActivityItem } from "@/lib/echo-data";
-import { cn } from "@/lib/utils";
+import {
+  useDeleteNotification,
+  useMarkNotifications,
+  useNotifications,
+} from "@/lib/echo-queries";
 
 export const Route = createFileRoute("/activity")({
   head: () => ({
     meta: [
-      { title: "Activity — Echo" },
+      { title: "Activity — Echo notifications" },
       {
         name: "description",
-        content:
-          "One feed for friend requests, mentions, group invites, missed calls, voicemails, poll results and security alerts.",
+        content: "Mentions, friend requests, group invites and security alerts across your Echo account.",
       },
       { property: "og:title", content: "Activity — Echo" },
-      {
-        property: "og:description",
-        content: "Everything important on Echo, in one calm, filterable feed.",
-      },
+      { property: "og:description", content: "Every Echo notification in one calm feed." },
     ],
   }),
   component: ActivityPage,
 });
 
-const icons: Record<ActivityItem["type"], typeof Bell> = {
-  friend_request: UserPlus,
-  mention: AtSign,
-  group_invite: Users,
-  missed_call: PhoneMissed,
-  voicemail: VoicemailIcon,
-  poll: BarChart3,
-  security: ShieldAlert,
-};
-
-type Filter = "all" | "unread" | "mentions" | "calls" | "security";
-
 function ActivityPage() {
-  const [filter, setFilter] = useState<Filter>("all");
-  const [items, setItems] = useState(activity);
-
-  const list = items.filter((i) => {
-    if (filter === "all") return true;
-    if (filter === "unread") return i.unread;
-    if (filter === "mentions") return i.type === "mention";
-    if (filter === "calls") return i.type === "missed_call" || i.type === "voicemail";
-    return i.type === "security";
-  });
+  const notifications = useNotifications();
+  const markAll = useMarkNotifications();
+  const remove = useDeleteNotification();
+  const items = notifications.data ?? [];
+  const unread = items.filter((i) => i.unread).length;
 
   return (
     <AppShell
       title="Activity"
-      subtitle={`${items.filter((i) => i.unread).length} new notifications`}
+      subtitle={unread ? `${unread} unread` : "You're all caught up"}
       actions={
-        <button
-          onClick={() => {
-            setItems((p) => p.map((i) => ({ ...i, unread: false })));
-            toast("All caught up");
-          }}
-          className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border px-3.5 text-sm font-medium"
-        >
-          <CheckCheck className="h-4 w-4" />
-          <span className="hidden sm:inline">Mark all read</span>
-        </button>
+        unread ? (
+          <button
+            onClick={() => markAll.mutate({ all: true })}
+            className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-3 py-1.5 text-xs font-semibold"
+          >
+            <Check className="h-3.5 w-3.5" /> Mark all read
+          </button>
+        ) : null
       }
     >
-      <div className="mx-auto w-full max-w-3xl px-4 py-5 sm:px-6">
-        <div className="flex gap-1.5 overflow-x-auto pb-1">
-          {(
-            [
-              ["all", "All"],
-              ["unread", "Unread"],
-              ["mentions", "Mentions"],
-              ["calls", "Calls & voicemail"],
-              ["security", "Security"],
-            ] as const
-          ).map(([key, label]) => (
-            <button
-              key={key}
-              onClick={() => setFilter(key)}
-              className={cn(
-                "shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors",
-                filter === key
-                  ? "border-primary/40 bg-primary/15 text-foreground"
-                  : "border-border bg-surface text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-
-        {list.length === 0 ? (
+      <div className="mx-auto max-w-2xl px-4 py-4 sm:px-6">
+        {notifications.isLoading ? (
+          <p className="py-10 text-center text-sm text-muted-foreground">Loading activity…</p>
+        ) : items.length === 0 ? (
           <EmptyState
             icon={Bell}
             title="Nothing new"
-            detail="Mentions, requests, voicemails and security alerts will land here."
+            detail="Mentions, friend requests and invites will land here."
           />
         ) : (
-          <div className="mt-4 space-y-2.5">
-            {list.map((item) => {
-              const Icon = icons[item.type];
-              return (
-                <article
-                  key={item.id}
-                  className={cn(
-                    "flex items-start gap-3 rounded-3xl border p-4 transition-colors",
-                    item.unread
-                      ? "border-primary/30 bg-primary/8 shadow-soft"
-                      : "border-border bg-surface",
-                  )}
+          <ul className="space-y-2">
+            {items.map((item) => (
+              <li
+                key={item.id}
+                className="flex items-start gap-3 rounded-2xl border border-border bg-surface p-3.5"
+              >
+                <EchoAvatar
+                  initials={item.actor?.avatar ?? "EC"}
+                  color={item.actor?.color ?? "oklch(0.63 0.13 195)"}
+                  size="sm"
+                />
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-semibold">
+                    {item.title}
+                    {item.unread ? (
+                      <span className="ml-2 inline-block h-2 w-2 rounded-full bg-primary align-middle" />
+                    ) : null}
+                  </p>
+                  <p className="truncate text-sm text-muted-foreground">{item.detail}</p>
+                  <p className="mt-1 text-[11px] text-muted-foreground">{item.time}</p>
+                </div>
+                <button
+                  onClick={() => remove.mutate(item.id)}
+                  className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary"
+                  aria-label="Dismiss notification"
                 >
-                  <EchoAvatar
-                    initials={item.actor ?? "EC"}
-                    color={item.color ?? "oklch(0.63 0.13 195)"}
-                    size="sm"
-                  />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-semibold">{item.title}</p>
-                    <p className="mt-0.5 text-xs text-muted-foreground">{item.detail}</p>
-                    {item.type === "friend_request" ? (
-                      <div className="mt-2.5 flex gap-2">
-                        <button
-                          onClick={() => {
-                            setItems((p) => p.filter((x) => x.id !== item.id));
-                            toast("Friend request accepted");
-                          }}
-                          className="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground"
-                        >
-                          Accept
-                        </button>
-                        <button
-                          onClick={() => {
-                            setItems((p) => p.filter((x) => x.id !== item.id));
-                            toast("Request declined");
-                          }}
-                          className="rounded-full border border-border px-4 py-1.5 text-xs font-medium"
-                        >
-                          Decline
-                        </button>
-                      </div>
-                    ) : null}
-                    {item.type === "group_invite" ? (
-                      <div className="mt-2.5 flex gap-2">
-                        <button
-                          onClick={() => toast("Joined Darkroom Sundays")}
-                          className="rounded-full bg-primary px-4 py-1.5 text-xs font-semibold text-primary-foreground"
-                        >
-                          Join group
-                        </button>
-                        <button
-                          onClick={() => toast("Invite dismissed")}
-                          className="rounded-full border border-border px-4 py-1.5 text-xs font-medium"
-                        >
-                          Ignore
-                        </button>
-                      </div>
-                    ) : null}
-                    {item.type === "voicemail" ? (
-                      <button
-                        onClick={() => toast("Playing voicemail")}
-                        className="mt-2.5 rounded-full border border-border px-4 py-1.5 text-xs font-medium"
-                      >
-                        Play voicemail
-                      </button>
-                    ) : null}
-                  </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1.5">
-                    <span className="text-[11px] text-muted-foreground">{item.time}</span>
-                    <Icon className="h-4 w-4 text-muted-foreground" />
-                  </div>
-                </article>
-              );
-            })}
-          </div>
+                  <Trash2 className="h-4 w-4" />
+                </button>
+              </li>
+            ))}
+          </ul>
         )}
       </div>
     </AppShell>
