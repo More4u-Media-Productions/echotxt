@@ -397,13 +397,28 @@ export function useCreateGroup() {
 
 /* ---------------------------------- friends ---------------------------------- */
 
+export type FriendStatus = "pending" | "accepted" | "blocked" | "declined";
+
 export interface FriendEdge {
   id: string;
-  status: "pending" | "accepted" | "blocked";
+  status: FriendStatus;
   note: string | null;
   incoming: boolean;
+  blockedBy: string | null;
   createdAt: string;
   profile: EchoProfile;
+}
+
+interface FriendshipRow {
+  id: string;
+  requester_id: string;
+  addressee_id: string;
+  status: FriendStatus;
+  note: string | null;
+  blocked_by: string | null;
+  created_at: string;
+  requester: unknown;
+  addressee: unknown;
 }
 
 export function useFriendships() {
@@ -419,7 +434,7 @@ export function useFriendships() {
         )
         .order("created_at", { ascending: false });
       if (error) throw error;
-      return (data ?? []).map((row) => {
+      return ((data ?? []) as unknown as FriendshipRow[]).map((row) => {
         const incoming = row.addressee_id === userId;
         const other = incoming ? row.requester : row.addressee;
         return {
@@ -427,29 +442,105 @@ export function useFriendships() {
           status: row.status,
           note: row.note,
           incoming,
+          blockedBy: row.blocked_by ?? null,
           createdAt: row.created_at,
-          profile: toProfile(other as unknown as ProfileRow),
+          profile: toProfile(other as ProfileRow),
         };
       });
     },
   });
 }
 
+function selectEdges(edges: FriendEdge[] | undefined, pick: (e: FriendEdge) => boolean) {
+  return (edges ?? []).filter(pick);
+}
+
+export function useFriends() {
+  const q = useFriendships();
+  return { ...q, friends: selectEdges(q.data, (e) => e.status === "accepted") };
+}
+
+export function useIncomingRequests() {
+  const q = useFriendships();
+  return {
+    ...q,
+    requests: selectEdges(q.data, (e) => e.status === "pending" && e.incoming),
+  };
+}
+
+export function useSentRequests() {
+  const q = useFriendships();
+  return {
+    ...q,
+    requests: selectEdges(q.data, (e) => e.status === "pending" && !e.incoming),
+  };
+}
+
+export function useBlockedUsers() {
+  const userId = useUserId();
+  const q = useFriendships();
+  return {
+    ...q,
+    blocked: selectEdges(q.data, (e) => e.status === "blocked" && e.blockedBy === userId),
+  };
+}
+
+/* ------------------------------ discovery / search --------------------------- */
+
+export interface DiscoveredProfile extends EchoProfile {
+  friendshipId: string | null;
+  friendshipStatus: FriendStatus | null;
+  incoming: boolean;
+}
+
+interface SearchRow {
+  id: string;
+  username: string;
+  display_name: string;
+  bio: string;
+  pronouns: string | null;
+  avatar_color: string;
+  avatar_url: string | null;
+  banner_url: string | null;
+  presence: Presence;
+  friendship_id: string | null;
+  friendship_status: FriendStatus | null;
+  incoming: boolean | null;
+  blocked_by?: string | null;
+}
+
+function toDiscovered(row: SearchRow): DiscoveredProfile {
+  const base = toProfile({
+    id: row.id,
+    username: row.username,
+    display_name: row.display_name,
+    bio: row.bio,
+    pronouns: row.pronouns,
+    avatar_color: row.avatar_color,
+    avatar_url: row.avatar_url,
+    banner_url: row.banner_url,
+    presence: row.presence,
+    last_seen: new Date().toISOString(),
+    created_at: new Date().toISOString(),
+  });
+  return {
+    ...base,
+    friendshipId: row.friendship_id ?? null,
+    friendshipStatus: row.friendship_status ?? null,
+    incoming: !!row.incoming,
+  };
+}
+
 export function useSearchProfiles(term: string) {
   const userId = useUserId();
+  const q = term.trim().replace(/^@/, "");
   return useQuery({
-    queryKey: ["profile-search", term, userId],
-    enabled: !!userId && term.trim().length > 0,
-    queryFn: async (): Promise<EchoProfile[]> => {
-      const q = term.trim().replace(/^@/, "");
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .or(`username.ilike.%${q}%,display_name.ilike.%${q}%`)
-        .neq("id", userId!)
-        .limit(20);
+    queryKey: ["profile-search", q, userId],
+    enabled: !!userId && q.length >= 2,
+    queryFn: async (): Promise<DiscoveredProfile[]> => {
+      const { data, error } = await supabase.rpc("search_profiles", { _term: q, _limit: 20 });
       if (error) throw error;
-      return (data ?? []).map((r) => toProfile(r as ProfileRow));
+      return ((data ?? []) as unknown as SearchRow[]).map(toDiscovered);
     },
   });
 }
@@ -459,30 +550,84 @@ export function useDiscoverProfiles() {
   return useQuery({
     queryKey: ["discover", userId],
     enabled: !!userId,
-    queryFn: async (): Promise<EchoProfile[]> => {
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("*")
-        .neq("id", userId!)
-        .order("created_at", { ascending: false })
-        .limit(12);
+    queryFn: async (): Promise<DiscoveredProfile[]> => {
+      const { data, error } = await supabase.rpc("search_profiles", { _term: "", _limit: 12 });
       if (error) throw error;
-      return (data ?? []).map((r) => toProfile(r as ProfileRow));
+      return ((data ?? []) as unknown as SearchRow[]).map(toDiscovered);
     },
   });
 }
 
+export function useProfilePreview(profileId: string | null) {
+  const userId = useUserId();
+  return useQuery({
+    queryKey: ["profile-preview", profileId, userId],
+    enabled: !!userId && !!profileId,
+    queryFn: async (): Promise<DiscoveredProfile | null> => {
+      const { data, error } = await supabase.rpc("public_profile", { _id: profileId! });
+      if (error) throw error;
+      const row = (data as unknown as SearchRow[])?.[0];
+      return row ? toDiscovered(row) : null;
+    },
+  });
+}
+
+/* ------------------------------ friend mutations ----------------------------- */
+
+function useFriendInvalidate() {
+  const queryClient = useQueryClient();
+  return () => {
+    void queryClient.invalidateQueries({ queryKey: ["friendships"] });
+    void queryClient.invalidateQueries({ queryKey: ["profile-search"] });
+    void queryClient.invalidateQueries({ queryKey: ["profile-preview"] });
+    void queryClient.invalidateQueries({ queryKey: ["discover"] });
+    void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+  };
+}
+
 export function useSendFriendRequest() {
   const userId = useUserId();
-  const queryClient = useQueryClient();
+  const invalidate = useFriendInvalidate();
   return useMutation({
-    mutationFn: async (input: { userId: string; note?: string; displayName: string }) => {
-      const { error } = await supabase.from("friendships").insert({
-        requester_id: userId!,
-        addressee_id: input.userId,
-        note: input.note ?? null,
-      });
-      if (error) throw error;
+    mutationFn: async (input: { userId: string; note?: string; displayName?: string }) => {
+      // Re-open a previously declined request instead of violating the unique pair.
+      const { data: existing } = await supabase
+        .from("friendships")
+        .select("id, requester_id, status")
+        .or(
+          `and(requester_id.eq.${userId},addressee_id.eq.${input.userId}),and(requester_id.eq.${input.userId},addressee_id.eq.${userId})`,
+        )
+        .maybeSingle();
+
+      if (existing && existing.status === "blocked") {
+        throw new Error("You can't send a request to this person.");
+      }
+      if (existing && existing.status === "accepted") {
+        throw new Error("You're already friends.");
+      }
+
+      if (existing) {
+        const { error } = await supabase
+          .from("friendships")
+          .update({
+            status: "pending",
+            requester_id: userId!,
+            addressee_id: input.userId,
+            note: input.note ?? null,
+            responded_at: null,
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", existing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase.from("friendships").insert({
+          requester_id: userId!,
+          addressee_id: input.userId,
+          note: input.note ?? null,
+        });
+        if (error) throw error;
+      }
+
       await supabase.from("notifications").insert({
         user_id: input.userId,
         actor_id: userId!,
@@ -491,26 +636,22 @@ export function useSendFriendRequest() {
         detail: input.note ?? "wants to connect on Echo",
       });
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["friendships"] });
-      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
-    },
+    onSuccess: invalidate,
   });
 }
 
-export function useRespondFriendRequest() {
+export function useAcceptFriendRequest() {
   const userId = useUserId();
-  const queryClient = useQueryClient();
+  const invalidate = useFriendInvalidate();
   return useMutation({
-    mutationFn: async (input: { id: string; accept: boolean; otherId: string }) => {
-      if (!input.accept) {
-        const { error } = await supabase.from("friendships").delete().eq("id", input.id);
-        if (error) throw error;
-        return;
-      }
+    mutationFn: async (input: { id: string; otherId: string }) => {
       const { error } = await supabase
         .from("friendships")
-        .update({ status: "accepted", updated_at: new Date().toISOString() })
+        .update({
+          status: "accepted",
+          responded_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
         .eq("id", input.id);
       if (error) throw error;
       await supabase.from("notifications").insert({
@@ -521,17 +662,110 @@ export function useRespondFriendRequest() {
         detail: "You are now connected on Echo",
       });
     },
-    onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: ["friendships"] });
-      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    onSuccess: invalidate,
+  });
+}
+
+export function useDeclineFriendRequest() {
+  const invalidate = useFriendInvalidate();
+  return useMutation({
+    mutationFn: async (input: { id: string }) => {
+      const { error } = await supabase
+        .from("friendships")
+        .update({
+          status: "declined",
+          responded_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", input.id);
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+}
+
+export function useCancelFriendRequest() {
+  const invalidate = useFriendInvalidate();
+  return useMutation({
+    mutationFn: async (input: { id: string }) => {
+      const { error } = await supabase.from("friendships").delete().eq("id", input.id);
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+}
+
+export function useRemoveFriend() {
+  const invalidate = useFriendInvalidate();
+  return useMutation({
+    mutationFn: async (input: { id: string }) => {
+      const { error } = await supabase.from("friendships").delete().eq("id", input.id);
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+}
+
+export function useBlockUser() {
+  const userId = useUserId();
+  const invalidate = useFriendInvalidate();
+  return useMutation({
+    mutationFn: async (input: { id?: string | null; otherId: string }) => {
+      if (input.id) {
+        const { error } = await supabase
+          .from("friendships")
+          .update({
+            status: "blocked",
+            blocked_by: userId!,
+            responded_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          })
+          .eq("id", input.id);
+        if (error) throw error;
+        return;
+      }
+      const { error } = await supabase.from("friendships").insert({
+        requester_id: userId!,
+        addressee_id: input.otherId,
+        status: "blocked",
+        blocked_by: userId!,
+      });
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+}
+
+export function useUnblockUser() {
+  const invalidate = useFriendInvalidate();
+  return useMutation({
+    mutationFn: async (input: { id: string }) => {
+      const { error } = await supabase.from("friendships").delete().eq("id", input.id);
+      if (error) throw error;
+    },
+    onSuccess: invalidate,
+  });
+}
+
+/** Legacy helpers kept so existing screens keep compiling. */
+export function useRespondFriendRequest() {
+  const accept = useAcceptFriendRequest();
+  const decline = useDeclineFriendRequest();
+  return useMutation({
+    mutationFn: async (input: { id: string; accept: boolean; otherId: string }) => {
+      if (input.accept) {
+        await accept.mutateAsync({ id: input.id, otherId: input.otherId });
+      } else {
+        await decline.mutateAsync({ id: input.id });
+      }
     },
   });
 }
 
 export function useUpdateFriendship() {
-  const queryClient = useQueryClient();
+  const invalidate = useFriendInvalidate();
   return useMutation({
-    mutationFn: async (input: { id: string; status?: "blocked" | "accepted"; remove?: boolean }) => {
+    mutationFn: async (input: { id: string; status?: FriendStatus; remove?: boolean }) => {
       if (input.remove) {
         const { error } = await supabase.from("friendships").delete().eq("id", input.id);
         if (error) throw error;
@@ -543,9 +777,10 @@ export function useUpdateFriendship() {
         .eq("id", input.id);
       if (error) throw error;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["friendships"] }),
+    onSuccess: invalidate,
   });
 }
+
 
 /* ----------------------------------- calls ----------------------------------- */
 

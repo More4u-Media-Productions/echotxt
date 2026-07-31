@@ -166,28 +166,34 @@ export type Database = {
       friendships: {
         Row: {
           addressee_id: string
+          blocked_by: string | null
           created_at: string
           id: string
           note: string | null
           requester_id: string
+          responded_at: string | null
           status: Database["public"]["Enums"]["friendship_status"]
           updated_at: string
         }
         Insert: {
           addressee_id: string
+          blocked_by?: string | null
           created_at?: string
           id?: string
           note?: string | null
           requester_id: string
+          responded_at?: string | null
           status?: Database["public"]["Enums"]["friendship_status"]
           updated_at?: string
         }
         Update: {
           addressee_id?: string
+          blocked_by?: string | null
           created_at?: string
           id?: string
           note?: string | null
           requester_id?: string
+          responded_at?: string | null
           status?: Database["public"]["Enums"]["friendship_status"]
           updated_at?: string
         }
@@ -195,6 +201,13 @@ export type Database = {
           {
             foreignKeyName: "friendships_addressee_id_fkey"
             columns: ["addressee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friendships_blocked_by_fkey"
+            columns: ["blocked_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -454,16 +467,61 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      friendship_state: {
+        Args: { _other: string }
+        Returns: {
+          blocked_by: string
+          friendship_id: string
+          incoming: boolean
+          status: string
+        }[]
+      }
+      is_blocked_with: { Args: { _other: string }; Returns: boolean }
       is_member: {
         Args: { _conversation_id: string; _user_id: string }
         Returns: boolean
+      }
+      public_profile: {
+        Args: { _id: string }
+        Returns: {
+          avatar_color: string
+          avatar_url: string
+          banner_url: string
+          bio: string
+          blocked_by: string
+          display_name: string
+          friendship_id: string
+          friendship_status: string
+          id: string
+          incoming: boolean
+          presence: Database["public"]["Enums"]["presence_state"]
+          pronouns: string
+          username: string
+        }[]
+      }
+      search_profiles: {
+        Args: { _limit?: number; _term: string }
+        Returns: {
+          avatar_color: string
+          avatar_url: string
+          banner_url: string
+          bio: string
+          display_name: string
+          friendship_id: string
+          friendship_status: string
+          id: string
+          incoming: boolean
+          presence: Database["public"]["Enums"]["presence_state"]
+          pronouns: string
+          username: string
+        }[]
       }
     }
     Enums: {
       call_media: "voice" | "video"
       call_status: "ringing" | "answered" | "missed" | "declined" | "voicemail"
       conversation_kind: "dm" | "group"
-      friendship_status: "pending" | "accepted" | "blocked"
+      friendship_status: "pending" | "accepted" | "blocked" | "declined"
       message_kind:
         | "text"
         | "image"
@@ -604,7 +662,7 @@ export const Constants = {
       call_media: ["voice", "video"],
       call_status: ["ringing", "answered", "missed", "declined", "voicemail"],
       conversation_kind: ["dm", "group"],
-      friendship_status: ["pending", "accepted", "blocked"],
+      friendship_status: ["pending", "accepted", "blocked", "declined"],
       message_kind: [
         "text",
         "image",

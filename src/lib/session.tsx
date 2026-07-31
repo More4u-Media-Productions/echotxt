@@ -152,12 +152,49 @@ export function toProfile(row: ProfileRow): EchoProfile {
   };
 }
 
+function slugify(value: string): string {
+  const clean = value.toLowerCase().replace(/[^a-z0-9_.]/g, "");
+  return (clean.length >= 3 ? clean : `${clean}user`).slice(0, 20);
+}
+
+/** Creates the profile row for a signed-in user when one doesn't exist yet. */
+export async function ensureProfile(session: Session): Promise<void> {
+  const meta = (session.user.user_metadata ?? {}) as Record<string, string | undefined>;
+  const { data: existing } = await supabase
+    .from("profiles")
+    .select("id")
+    .eq("id", session.user.id)
+    .maybeSingle();
+  if (existing) return;
+
+  const base = slugify(
+    meta['username'] || session.user.email?.split("@")[0] || `echo${Date.now() % 100000}`,
+  );
+  const displayName = meta['display_name'] || meta['full_name'] || base;
+  const hue = Math.floor(Math.random() * 360);
+
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    const username = attempt === 0 ? base : `${base.slice(0, 18)}${attempt}`;
+    const { error } = await supabase.from("profiles").insert({
+      id: session.user.id,
+      username,
+      display_name: displayName,
+      avatar_color: `oklch(0.63 0.13 ${hue})`,
+      avatar_url: meta['avatar_url'] ?? null,
+    });
+    if (!error) return;
+    if (error.code !== "23505") throw error;
+  }
+}
+
 export function useMyProfile() {
-  const userId = useUserId();
+  const { session } = useSession();
+  const userId = session?.user.id ?? null;
   return useQuery({
     queryKey: ["profile", userId],
     enabled: !!userId,
     queryFn: async (): Promise<EchoProfile | null> => {
+      if (session) await ensureProfile(session);
       const { data, error } = await supabase
         .from("profiles")
         .select("*")
@@ -166,8 +203,10 @@ export function useMyProfile() {
       if (error) throw error;
       return data ? toProfile(data as ProfileRow) : null;
     },
+    retry: 1,
   });
 }
+
 
 export async function signOutEverywhere() {
   await supabase.auth.signOut();
