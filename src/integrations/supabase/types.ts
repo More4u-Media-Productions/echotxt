@@ -166,28 +166,34 @@ export type Database = {
       friendships: {
         Row: {
           addressee_id: string
+          blocked_by: string | null
           created_at: string
           id: string
           note: string | null
           requester_id: string
+          responded_at: string | null
           status: Database["public"]["Enums"]["friendship_status"]
           updated_at: string
         }
         Insert: {
           addressee_id: string
+          blocked_by?: string | null
           created_at?: string
           id?: string
           note?: string | null
           requester_id: string
+          responded_at?: string | null
           status?: Database["public"]["Enums"]["friendship_status"]
           updated_at?: string
         }
         Update: {
           addressee_id?: string
+          blocked_by?: string | null
           created_at?: string
           id?: string
           note?: string | null
           requester_id?: string
+          responded_at?: string | null
           status?: Database["public"]["Enums"]["friendship_status"]
           updated_at?: string
         }
@@ -195,6 +201,13 @@ export type Database = {
           {
             foreignKeyName: "friendships_addressee_id_fkey"
             columns: ["addressee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friendships_blocked_by_fkey"
+            columns: ["blocked_by"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -463,7 +476,7 @@ export type Database = {
       call_media: "voice" | "video"
       call_status: "ringing" | "answered" | "missed" | "declined" | "voicemail"
       conversation_kind: "dm" | "group"
-      friendship_status: "pending" | "accepted" | "blocked"
+      friendship_status: "pending" | "accepted" | "blocked" | "declined"
       message_kind:
         | "text"
         | "image"
@@ -604,7 +617,7 @@ export const Constants = {
       call_media: ["voice", "video"],
       call_status: ["ringing", "answered", "missed", "declined", "voicemail"],
       conversation_kind: ["dm", "group"],
-      friendship_status: ["pending", "accepted", "blocked"],
+      friendship_status: ["pending", "accepted", "blocked", "declined"],
       message_kind: [
         "text",
         "image",
