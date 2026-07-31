@@ -4,30 +4,112 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from "
 import { supabase } from "@/integrations/supabase/client";
 import { initialsOf, type EchoProfile, type Presence } from "@/lib/echo-data";
 
-const SessionContext = createContext<{ session: Session | null; loading: boolean }>({
+const SESSION_LOAD_TIMEOUT_MS = 10_000;
+
+interface SessionState {
+  session: Session | null;
+  loading: boolean;
+  error: Error | null;
+  online: boolean;
+  retry: () => void;
+}
+
+const SessionContext = createContext<SessionState>({
   session: null,
   loading: true,
+  error: null,
+  online: true,
+  retry: () => {},
 });
+
+function useOnlineStatus() {
+  const [online, setOnline] = useState(
+    typeof navigator !== "undefined" ? navigator.onLine : true,
+  );
+  useEffect(() => {
+    const on = () => setOnline(true);
+    const off = () => setOnline(false);
+    window.addEventListener("online", on);
+    window.addEventListener("offline", off);
+    return () => {
+      window.removeEventListener("online", on);
+      window.removeEventListener("offline", off);
+    };
+  }, []);
+  return online;
+}
 
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<Error | null>(null);
+  const [attempt, setAttempt] = useState(0);
   const queryClient = useQueryClient();
+  const online = useOnlineStatus();
 
   useEffect(() => {
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
-      setSession(next);
-      setLoading(false);
-      queryClient.invalidateQueries();
-    });
-    void supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setLoading(false);
-    });
-    return () => sub.subscription.unsubscribe();
-  }, [queryClient]);
+    setLoading(true);
+    setError(null);
 
-  return <SessionContext value={{ session, loading }}>{children}</SessionContext>;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
+    let cancelled = false;
+
+    const init = async () => {
+      try {
+        // Guard against a hanging session probe. Supabase client creation can also throw
+        // if environment variables are missing, so wrap the whole flow.
+        const { data: sub } = supabase.auth.onAuthStateChange((_event, next) => {
+          if (cancelled) return;
+          setSession(next);
+          setLoading(false);
+          setError(null);
+          if (timeoutId) clearTimeout(timeoutId);
+          queryClient.invalidateQueries();
+        });
+
+        timeoutId = setTimeout(() => {
+          if (cancelled) return;
+          setLoading(false);
+          setError(
+            new Error(
+              online
+                ? "Echo couldn't connect to your account. Please try again."
+                : "You appear to be offline. Check your connection and try again.",
+            ),
+          );
+        }, SESSION_LOAD_TIMEOUT_MS);
+
+        const { data, error: sessionError } = await supabase.auth.getSession();
+        if (cancelled) return;
+        if (sessionError) throw sessionError;
+        setSession(data.session);
+        setLoading(false);
+        setError(null);
+        if (timeoutId) clearTimeout(timeoutId);
+      } catch (err) {
+        if (cancelled) return;
+        console.error("[Echo] Session initialization failed:", err);
+        setLoading(false);
+        setError(err instanceof Error ? err : new Error(String(err)));
+        if (timeoutId) clearTimeout(timeoutId);
+      }
+    };
+
+    void init();
+
+    return () => {
+      cancelled = true;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, [attempt, online, queryClient]);
+
+  const retry = () => setAttempt((a) => a + 1);
+
+  return (
+    <SessionContext value={{ session, loading, error, online, retry }}>
+      {children}
+    </SessionContext>
+  );
 }
 
 export function useSession() {
