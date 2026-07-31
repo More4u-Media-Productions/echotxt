@@ -467,9 +467,54 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      friendship_state: {
+        Args: { _other: string }
+        Returns: {
+          blocked_by: string
+          friendship_id: string
+          incoming: boolean
+          status: string
+        }[]
+      }
+      is_blocked_with: { Args: { _other: string }; Returns: boolean }
       is_member: {
         Args: { _conversation_id: string; _user_id: string }
         Returns: boolean
+      }
+      public_profile: {
+        Args: { _id: string }
+        Returns: {
+          avatar_color: string
+          avatar_url: string
+          banner_url: string
+          bio: string
+          blocked_by: string
+          display_name: string
+          friendship_id: string
+          friendship_status: string
+          id: string
+          incoming: boolean
+          presence: Database["public"]["Enums"]["presence_state"]
+          pronouns: string
+          username: string
+        }[]
+      }
+      search_profiles: {
+        Args: { _limit?: number; _term: string }
+        Returns: {
+          avatar_color: string
+          avatar_url: string
+          banner_url: string
+          bio: string
+          display_name: string
+          friendship_id: string
+          friendship_status: string
+          id: string
+          incoming: boolean
+          presence: Database["public"]["Enums"]["presence_state"]
+          pronouns: string
+          username: string
+        }[]
       }
     }
     Enums: {
