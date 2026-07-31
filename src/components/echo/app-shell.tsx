@@ -39,10 +39,10 @@ export function AppShell({
   contentClassName,
 }: {
   title: string;
-  subtitle?: string;
-  actions?: ReactNode;
+  subtitle?: string | undefined;
+  actions?: ReactNode | undefined;
   children: ReactNode;
-  contentClassName?: string;
+  contentClassName?: string | undefined;
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { dark, toggle } = useTheme();
@@ -202,7 +202,7 @@ export function EmptyState({
   icon: typeof Search;
   title: string;
   detail: string;
-  action?: ReactNode;
+  action?: ReactNode | undefined;
 }) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-16 text-center">

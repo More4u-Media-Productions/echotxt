@@ -275,7 +275,7 @@ function Bubble({ message, group }: { message: EchoMessage; group: boolean }) {
   );
 }
 
-export function Conversation({ chat, onBack }: { chat: EchoChat; onBack?: () => void }) {
+export function Conversation({ chat, onBack }: { chat: EchoChat; onBack?: (() => void) | undefined }) {
   const [messages, setMessages] = useState<EchoMessage[]>(chat.messages);
   const [text, setText] = useState(chat.draft ?? "");
   const [emojiOpen, setEmojiOpen] = useState(false);

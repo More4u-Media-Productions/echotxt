@@ -27,7 +27,7 @@ export function CallOverlay({
   color: string;
   media: "voice" | "video";
   onClose: () => void;
-  onVoicemail?: () => void;
+  onVoicemail?: (() => void) | undefined;
 }) {
   const [state, setState] = useState<"ringing" | "connected" | "missed">("ringing");
   const [seconds, setSeconds] = useState(0);
@@ -131,7 +131,7 @@ function CallButton({
   children: React.ReactNode;
   onClick: () => void;
   label: string;
-  active?: boolean;
+  active?: boolean | undefined;
 }) {
   return (
     <button
