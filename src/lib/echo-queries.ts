@@ -102,6 +102,8 @@ export function useChats() {
             name,
             handle: isGroup ? `${all.length} members` : (otherProfile?.username ?? ""),
             avatar: initialsOf(name),
+            avatarUrl: isGroup ? convo.avatar_url : (otherProfile?.avatarUrl ?? null),
+            bannerUrl: convo.banner_url ?? null,
             color: isGroup ? convo.avatar_color : (otherProfile?.color ?? convo.avatar_color),
             members: all.length,
             memberIds: all.map((m) => m.user_id),
