@@ -113,6 +113,7 @@ function ChatsPage() {
                     <EchoAvatar
                       initials={c.avatar}
                       color={c.color}
+                      avatarUrl={c.avatarUrl}
                       {...(c.presence ? { presence: c.presence } : {})}
                       size="md"
                     />

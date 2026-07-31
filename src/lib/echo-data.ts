@@ -21,6 +21,8 @@ export interface EchoProfile {
   pronouns: string | null;
   color: string;
   avatar: string;
+  avatarUrl: string | null;
+  bannerUrl: string | null;
   presence: Presence;
   lastSeen: string;
   joined: string;
@@ -38,9 +40,13 @@ export interface EchoMessage {
   authorName: string;
   authorColor: string;
   authorInitials: string;
+  authorAvatarUrl: string | null;
   kind: MessageKind;
   body: string;
   metadata: Record<string, unknown>;
+  attachmentUrl: string | null;
+  attachmentType: string | null;
+  attachmentName: string | null;
   createdAt: string;
   time: string;
   edited: boolean;
@@ -55,6 +61,8 @@ export interface EchoChat {
   name: string;
   handle: string;
   avatar: string;
+  avatarUrl: string | null;
+  bannerUrl: string | null;
   color: string;
   members: number;
   memberIds: string[];

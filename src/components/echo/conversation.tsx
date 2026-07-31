@@ -59,6 +59,7 @@ export function Conversation({
         <EchoAvatar
           initials={chat.avatar}
           color={chat.color}
+          avatarUrl={chat.avatarUrl}
           {...(chat.presence ? { presence: chat.presence } : {})}
           size="sm"
         />
@@ -98,7 +99,7 @@ export function Conversation({
           return (
             <div key={m.id} className={cn("flex gap-2.5", mine && "flex-row-reverse")}>
               {!mine ? (
-                <EchoAvatar initials={m.authorInitials} color={m.authorColor} size="sm" />
+                <EchoAvatar initials={m.authorInitials} color={m.authorColor} avatarUrl={m.authorAvatarUrl} size="sm" />
               ) : null}
               <div className={cn("max-w-[78%] min-w-0", mine && "items-end text-right")}>
                 {chat.kind === "group" && !mine ? (

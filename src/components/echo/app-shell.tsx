@@ -9,6 +9,10 @@ import {
   Settings,
   Moon,
   Sun,
+  AlertCircle,
+  RefreshCw,
+  LogIn,
+  WifiOff,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
@@ -40,7 +44,7 @@ export function AppShell({
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { dark, toggle } = useTheme();
   const navigate = useNavigate();
-  const { session, loading } = useSession();
+  const { session, loading, error, online, retry } = useSession();
   const profile = useMyProfile();
   const chats = useChats();
   const friends = useFriendships();
@@ -48,13 +52,50 @@ export function AppShell({
   useEchoRealtime();
 
   useEffect(() => {
-    if (!loading && !session) void navigate({ to: "/auth", replace: true });
-  }, [loading, session, navigate]);
+    if (!loading && !session && !error) void navigate({ to: "/auth", replace: true });
+  }, [loading, session, error, navigate]);
 
-  if (loading || !session) {
+  if (loading && !error) {
     return (
-      <div className="grid min-h-screen place-items-center bg-background text-muted-foreground">
-        <span className="text-sm">Loading Echo…</span>
+      <div className="grid min-h-screen place-items-center bg-background px-4 text-muted-foreground">
+        <div className="flex flex-col items-center gap-3">
+          <span className="grid h-10 w-10 animate-spin place-items-center rounded-2xl bg-primary/10 text-primary">
+            <RefreshCw className="h-5 w-5" />
+          </span>
+          <span className="text-sm font-medium">Loading Echo…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error || !session) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-background px-4 text-foreground">
+        <div className="w-full max-w-sm rounded-3xl border border-border bg-surface p-6 text-center shadow-soft">
+          <span className="mx-auto grid h-14 w-14 place-items-center rounded-3xl bg-destructive/10 text-destructive">
+            {online ? <AlertCircle className="h-6 w-6" /> : <WifiOff className="h-6 w-6" />}
+          </span>
+          <h1 className="mt-4 text-lg font-bold tracking-tight">
+            {online ? "Couldn't start Echo" : "You're offline"}
+          </h1>
+          <p className="mt-2 text-sm text-muted-foreground">
+            {error?.message ?? "Your session couldn't be loaded. Try signing in again."}
+          </p>
+          <div className="mt-6 flex flex-col gap-2">
+            <button
+              onClick={retry}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl bg-primary text-sm font-semibold text-primary-foreground transition-colors hover:bg-primary/90"
+            >
+              <RefreshCw className="h-4 w-4" /> Try again
+            </button>
+            <button
+              onClick={() => void navigate({ to: "/auth", replace: true })}
+              className="inline-flex h-11 items-center justify-center gap-2 rounded-2xl border border-border bg-background text-sm font-semibold text-foreground transition-colors hover:bg-secondary"
+            >
+              <LogIn className="h-4 w-4" /> Go to sign in
+            </button>
+          </div>
+        </div>
       </div>
     );
   }
@@ -128,6 +169,7 @@ export function AppShell({
             <EchoAvatar
               initials={me?.avatar ?? "…"}
               color={me?.color ?? "oklch(0.63 0.13 195)"}
+              avatarUrl={me?.avatarUrl}
               presence={me?.presence ?? "online"}
               size="sm"
             />
