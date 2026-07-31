@@ -64,6 +64,7 @@ function ProfilePage() {
           <EchoAvatar
             initials={me?.avatar ?? "…"}
             color={me?.color ?? "oklch(0.63 0.13 195)"}
+            avatarUrl={me?.avatarUrl}
             presence={me?.presence ?? "online"}
             size="lg"
           />

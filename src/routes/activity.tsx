@@ -64,6 +64,7 @@ function ActivityPage() {
                 <EchoAvatar
                   initials={item.actor?.avatar ?? "EC"}
                   color={item.actor?.color ?? "oklch(0.63 0.13 195)"}
+                  avatarUrl={item.actor?.avatarUrl}
                   size="sm"
                 />
                 <div className="min-w-0 flex-1">

@@ -87,7 +87,7 @@ function FriendsPage() {
               />
             ) : (
               friends.map((f) => (
-                <Row key={f.id} name={f.profile.displayName} handle={f.profile.username} avatar={f.profile.avatar} color={f.profile.color}>
+                <Row key={f.id} name={f.profile.displayName} handle={f.profile.username} avatar={f.profile.avatar} avatarUrl={f.profile.avatarUrl} color={f.profile.color}>
                   <button
                     onClick={() => update.mutate({ id: f.id, remove: true })}
                     className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground"
@@ -103,7 +103,7 @@ function FriendsPage() {
               <EmptyState icon={UserPlus} title="No pending requests" detail="You're all caught up." />
             ) : (
               requests.map((r) => (
-                <Row key={r.id} name={r.profile.displayName} handle={r.profile.username} avatar={r.profile.avatar} color={r.profile.color}>
+                <Row key={r.id} name={r.profile.displayName} handle={r.profile.username} avatar={r.profile.avatar} avatarUrl={r.profile.avatarUrl} color={r.profile.color}>
                   {r.incoming ? (
                     <>
                       <button
@@ -139,7 +139,7 @@ function FriendsPage() {
               />
             ) : (
               people.map((p) => (
-                <Row key={p.id} name={p.displayName} handle={p.username} avatar={p.avatar} color={p.color}>
+                <Row key={p.id} name={p.displayName} handle={p.username} avatar={p.avatar} avatarUrl={p.avatarUrl} color={p.color}>
                   <button
                     onClick={() =>
                       sendRequest.mutate(
@@ -164,18 +164,20 @@ function Row({
   name,
   handle,
   avatar,
+  avatarUrl,
   color,
   children,
 }: {
   name: string;
   handle: string;
   avatar: string;
+  avatarUrl?: string | null;
   color: string;
   children: React.ReactNode;
 }) {
   return (
     <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-3.5">
-      <EchoAvatar initials={avatar} color={color} size="sm" />
+      <EchoAvatar initials={avatar} color={color} avatarUrl={avatarUrl} size="sm" />
       <div className="min-w-0 flex-1">
         <p className="truncate text-sm font-semibold">{name}</p>
         <p className="truncate text-xs text-muted-foreground">{handle}</p>
