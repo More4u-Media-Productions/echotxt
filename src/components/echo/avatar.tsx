@@ -18,10 +18,10 @@ export function EchoAvatar({
 }: {
   initials: string;
   color: string;
-  presence?: Presence;
-  size?: keyof typeof sizes;
-  square?: boolean;
-  className?: string;
+  presence?: Presence | undefined;
+  size?: keyof typeof sizes | undefined;
+  square?: boolean | undefined;
+  className?: string | undefined;
 }) {
   return (
     <span className={cn("relative inline-flex shrink-0", className)}>

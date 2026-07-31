@@ -240,7 +240,7 @@ function Bubble({ message, group }: { message: EchoMessage; group: boolean }) {
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem
-                  variant="destructive"
+                  className="text-destructive"
                   onClick={() => toast("Deleted for everyone")}
                 >
                   Delete
@@ -342,7 +342,7 @@ export function Conversation({ chat, onBack }: { chat: EchoChat; onBack?: () => 
         <EchoAvatar
           initials={chat.avatar}
           color={chat.color}
-          presence={chat.presence}
+          {...(chat.presence ? { presence: chat.presence } : {})}
           square={chat.kind === "group"}
         />
         <div className="min-w-0 flex-1">
@@ -419,7 +419,7 @@ export function Conversation({ chat, onBack }: { chat: EchoChat; onBack?: () => 
               <DropdownMenuItem onClick={() => toast("Conversation archived")}>
                 Archive
               </DropdownMenuItem>
-              <DropdownMenuItem variant="destructive" onClick={() => toast("Reported")}>
+              <DropdownMenuItem className="text-destructive" onClick={() => toast("Reported")}>
                 Report
               </DropdownMenuItem>
             </DropdownMenuContent>
