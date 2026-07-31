@@ -1,285 +1,178 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useMemo, useState } from "react";
-import {
-  Archive,
-  Inbox,
-  MessageCirclePlus,
-  MessageSquare,
-  Pin,
-  Filter,
-  Check,
-  X,
-  ShieldBan,
-} from "lucide-react";
-import { toast } from "sonner";
+import { useState } from "react";
+import { MessageCircle } from "lucide-react";
 import { AppShell, EmptyState, SearchField } from "@/components/echo/app-shell";
 import { EchoAvatar } from "@/components/echo/avatar";
 import { Conversation } from "@/components/echo/conversation";
-import { chats, messageRequests, type EchoChat } from "@/lib/echo-data";
+import { useChats, useUpdateChatFlags } from "@/lib/echo-queries";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Echo — Private messaging without a phone number" },
+      { title: "Echo — private messaging with usernames" },
       {
         name: "description",
         content:
-          "Echo is a private messaging app built on usernames: direct messages, powerful groups, calls, voicemail and granular privacy controls.",
+          "Echo is a private messenger built on @usernames instead of phone numbers. Chats, groups, calls and message requests in one calm app.",
       },
-      { property: "og:title", content: "Echo — Private messaging without a phone number" },
+      { property: "og:title", content: "Echo — private messaging with usernames" },
       {
         property: "og:description",
-        content:
-          "Chats, friends, calls, activity and profile — one polished messaging app built around conversations, not feeds.",
+        content: "Chats, groups, calls and message requests — no phone number required.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: ChatsPage,
 });
 
-type Tab = "all" | "unread" | "requests" | "archived";
+type Filter = "all" | "unread" | "requests" | "archived";
 
 function ChatsPage() {
+  const chats = useChats();
+  const flags = useUpdateChatFlags();
+  const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
-  const [tab, setTab] = useState<Tab>("all");
-  const [activeId, setActiveId] = useState<string>("c1");
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [requests, setRequests] = useState(messageRequests);
+  const [openId, setOpenId] = useState<string | null>(null);
 
-  const list = useMemo(() => {
-    const base = chats.filter((c) => (tab === "archived" ? c.archived : !c.archived));
-    const filtered = tab === "unread" ? base.filter((c) => c.unread > 0) : base;
-    const q = query.trim().toLowerCase();
-    const searched = q
-      ? filtered.filter(
-          (c) => c.name.toLowerCase().includes(q) || c.handle.toLowerCase().includes(q),
-        )
-      : filtered;
-    return [...searched].sort((a, b) => Number(!!b.pinned) - Number(!!a.pinned));
-  }, [query, tab]);
+  const all = chats.data ?? [];
+  const visible = all
+    .filter((c) => {
+      if (filter === "archived") return c.archived;
+      if (filter === "requests") return !c.accepted && !c.archived;
+      if (filter === "unread") return c.unread > 0 && c.accepted && !c.archived;
+      return c.accepted && !c.archived;
+    })
+    .filter((c) =>
+      query.trim()
+        ? (c.name + c.handle).toLowerCase().includes(query.trim().toLowerCase())
+        : true,
+    );
 
-  const active = chats.find((c) => c.id === activeId) ?? chats[0]!;
-  const unreadTotal = chats.reduce((n, c) => n + (c.archived ? 0 : c.unread), 0);
+  const open = all.find((c) => c.id === openId) ?? null;
 
-  const open = (id: string) => {
-    setActiveId(id);
-    setMobileOpen(true);
-  };
+  const tabs: { key: Filter; label: string }[] = [
+    { key: "all", label: "All" },
+    { key: "unread", label: "Unread" },
+    { key: "requests", label: "Requests" },
+    { key: "archived", label: "Archived" },
+  ];
 
   return (
     <AppShell
       title="Chats"
-      subtitle={`${unreadTotal} unread · ${requests.length} message requests`}
+      subtitle={`${all.filter((c) => c.accepted && !c.archived).length} conversations`}
       contentClassName="lg:h-[calc(100vh-69px)] lg:overflow-hidden"
-      actions={
-        <button
-          onClick={() => toast("New conversation", { description: "Pick a friend or group" })}
-          className="inline-flex h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-sm font-semibold text-primary-foreground shadow-soft"
-        >
-          <MessageCirclePlus className="h-4 w-4" />
-          <span className="hidden sm:inline">New</span>
-        </button>
-      }
     >
-      <div className="grid h-full min-h-0 lg:grid-cols-[minmax(320px,380px)_1fr]">
+      <div className="grid h-full min-h-0 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
         <div
           className={cn(
-            "scroll-slim min-h-0 overflow-y-auto border-r border-border px-3 py-3 sm:px-4",
-            mobileOpen && "hidden lg:block",
+            "min-h-0 overflow-y-auto border-border px-4 py-4 lg:border-r",
+            open && "hidden lg:block",
           )}
         >
-          <SearchField
-            value={query}
-            onChange={setQuery}
-            placeholder="Search chats, people, messages"
-          />
-
+          <SearchField value={query} onChange={setQuery} placeholder="Search chats or @username" />
           <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
-            {(
-              [
-                ["all", "All", Filter],
-                ["unread", "Unread", MessageSquare],
-                ["requests", `Requests`, Inbox],
-                ["archived", "Archived", Archive],
-              ] as const
-            ).map(([key, label, Icon]) => (
+            {tabs.map((t) => (
               <button
-                key={key}
-                onClick={() => setTab(key)}
+                key={t.key}
+                onClick={() => setFilter(t.key)}
                 className={cn(
-                  "inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-colors",
-                  tab === key
-                    ? "border-primary/40 bg-primary/15 text-foreground"
-                    : "border-border bg-surface text-muted-foreground hover:text-foreground",
+                  "shrink-0 rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+                  filter === t.key
+                    ? "bg-primary text-primary-foreground"
+                    : "border border-border bg-surface text-muted-foreground",
                 )}
               >
-                <Icon className="h-3.5 w-3.5" />
-                {label}
-                {key === "requests" && requests.length ? (
-                  <span className="rounded-full bg-primary px-1.5 text-[10px] font-bold text-primary-foreground">
-                    {requests.length}
-                  </span>
-                ) : null}
+                {t.label}
               </button>
             ))}
           </div>
 
-          {tab === "requests" ? (
-            <div className="mt-4 space-y-3">
-              <p className="px-1 text-xs text-muted-foreground">
-                People who aren't friends land here first. Nothing is marked as read until you
-                accept.
-              </p>
-              {requests.length === 0 ? (
-                <EmptyState
-                  icon={Inbox}
-                  title="No message requests"
-                  detail="When someone outside your friends list messages you, it will wait here."
-                />
-              ) : (
-                requests.map((r) => (
-                  <article
-                    key={r.id}
-                    className="animate-pop rounded-3xl border border-border bg-surface p-4 shadow-soft"
-                  >
-                    <div className="flex items-start gap-3">
-                      <EchoAvatar initials={r.avatar} color={r.color} />
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold">{r.displayName}</p>
-                        <p className="truncate text-xs text-muted-foreground">
-                          {r.from} · {r.mutuals} mutual friends · {r.time}
-                        </p>
-                        <p className="mt-2 text-sm text-foreground/90">{r.preview}</p>
-                      </div>
-                    </div>
-                    <div className="mt-3 flex gap-2">
-                      <button
-                        onClick={() => {
-                          setRequests((p) => p.filter((x) => x.id !== r.id));
-                          toast("Request accepted", { description: `${r.from} moved to Chats` });
-                        }}
-                        className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-primary py-2 text-sm font-semibold text-primary-foreground"
-                      >
-                        <Check className="h-4 w-4" /> Accept
-                      </button>
-                      <button
-                        onClick={() => {
-                          setRequests((p) => p.filter((x) => x.id !== r.id));
-                          toast("Request declined");
-                        }}
-                        className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full border border-border py-2 text-sm font-medium"
-                      >
-                        <X className="h-4 w-4" /> Decline
-                      </button>
-                      <button
-                        onClick={() => {
-                          setRequests((p) => p.filter((x) => x.id !== r.id));
-                          toast("User blocked");
-                        }}
-                        className="grid h-9 w-9 shrink-0 place-items-center rounded-full border border-border text-destructive"
-                        aria-label="Block"
-                      >
-                        <ShieldBan className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </article>
-                ))
-              )}
-            </div>
-          ) : list.length === 0 ? (
+          {chats.isLoading ? (
+            <p className="py-10 text-center text-sm text-muted-foreground">Loading chats…</p>
+          ) : visible.length === 0 ? (
             <EmptyState
-              icon={MessageSquare}
-              title="Nothing here yet"
-              detail={
-                tab === "archived"
-                  ? "Archived conversations stay out of your way until someone replies."
-                  : "You're all caught up. Start a conversation with a friend."
-              }
+              icon={MessageCircle}
+              title="No conversations here"
+              detail="Add a friend by @username to start your first Echo chat."
             />
           ) : (
-            <div className="mt-3 space-y-1">
-              {list.map((chat) => (
-                <ChatRow
-                  key={chat.id}
-                  chat={chat}
-                  active={chat.id === activeId}
-                  onClick={() => open(chat.id)}
-                />
+            <ul className="mt-3 space-y-1">
+              {visible.map((c) => (
+                <li key={c.id}>
+                  <button
+                    onClick={() => setOpenId(c.id)}
+                    className={cn(
+                      "flex w-full items-center gap-3 rounded-2xl p-3 text-left transition-colors",
+                      openId === c.id ? "bg-secondary" : "hover:bg-secondary/60",
+                    )}
+                  >
+                    <EchoAvatar
+                      initials={c.avatar}
+                      color={c.color}
+                      {...(c.presence ? { presence: c.presence } : {})}
+                      size="md"
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-sm font-semibold">
+                          {c.name}
+                        </span>
+                        <span className="shrink-0 text-[11px] text-muted-foreground">
+                          {c.lastActivity}
+                        </span>
+                      </span>
+                      <span className="mt-0.5 flex items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
+                          {c.lastMessage ?? "No messages yet"}
+                        </span>
+                        {c.unread ? (
+                          <span className="shrink-0 rounded-full bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">
+                            {c.unread}
+                          </span>
+                        ) : null}
+                      </span>
+                    </span>
+                  </button>
+                  {!c.accepted ? (
+                    <div className="flex gap-2 px-3 pb-3">
+                      <button
+                        onClick={() => flags.mutate({ conversationId: c.id, accepted: true })}
+                        className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground"
+                      >
+                        Accept
+                      </button>
+                      <button
+                        onClick={() => flags.mutate({ conversationId: c.id, archived: true })}
+                        className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted-foreground"
+                      >
+                        Ignore
+                      </button>
+                    </div>
+                  ) : null}
+                </li>
               ))}
-            </div>
+            </ul>
           )}
         </div>
 
-        <div
-          className={cn(
-            "min-h-0 lg:block lg:h-full",
-            mobileOpen ? "fixed inset-0 z-40 bg-background lg:static" : "hidden",
+        <div className={cn("min-h-0", !open && "hidden lg:block")}>
+          {open ? (
+            <Conversation chat={open} onBack={() => setOpenId(null)} />
+          ) : (
+            <div className="hidden h-full place-items-center lg:grid">
+              <EmptyState
+                icon={MessageCircle}
+                title="Pick a conversation"
+                detail="Select a chat on the left to read and reply."
+              />
+            </div>
           )}
-        >
-          <Conversation chat={active} onBack={() => setMobileOpen(false)} />
         </div>
       </div>
     </AppShell>
-  );
-}
-
-function ChatRow({
-  chat,
-  active,
-  onClick,
-}: {
-  chat: EchoChat;
-  active: boolean;
-  onClick: () => void;
-}) {
-  const last = chat.messages[chat.messages.length - 1];
-  const preview = chat.draft
-    ? `Draft: ${chat.draft}`
-    : chat.typing
-      ? "typing…"
-      : last?.kind === "text"
-        ? last.body
-        : last
-          ? `${last.kind === "voicemail" ? "Voicemail" : last.kind === "voice" ? "Voice message" : last.kind === "poll" ? "Poll" : last.kind === "image" ? "Photo" : last.kind === "event" ? "Event" : "Attachment"}`
-          : "No messages yet";
-
-  return (
-    <button
-      onClick={onClick}
-      className={cn(
-        "flex w-full items-center gap-3 rounded-2xl px-3 py-2.5 text-left transition-colors",
-        active ? "bg-secondary" : "hover:bg-secondary/60",
-      )}
-    >
-      <EchoAvatar
-        initials={chat.avatar}
-        color={chat.color}
-        {...(chat.presence ? { presence: chat.presence } : {})}
-        square={chat.kind === "group"}
-      />
-      <span className="min-w-0 flex-1">
-        <span className="flex items-center gap-1.5">
-          <span className="min-w-0 flex-1 truncate text-sm font-semibold">{chat.name}</span>
-          {chat.pinned ? <Pin className="h-3 w-3 shrink-0 text-muted-foreground" /> : null}
-          <span className="shrink-0 text-[11px] text-muted-foreground">{chat.lastActivity}</span>
-        </span>
-        <span className="mt-0.5 flex items-center gap-2">
-          <span
-            className={cn(
-              "min-w-0 flex-1 truncate text-[13px]",
-              chat.draft ? "text-warning" : chat.typing ? "text-primary" : "text-muted-foreground",
-            )}
-          >
-            {preview}
-          </span>
-          {chat.unread ? (
-            <span className="grid h-5 min-w-5 shrink-0 place-items-center rounded-full bg-primary px-1.5 text-[11px] font-bold text-primary-foreground">
-              {chat.unread}
-            </span>
-          ) : null}
-        </span>
-      </span>
-    </button>
   );
 }

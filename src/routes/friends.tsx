@@ -1,177 +1,158 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useState } from "react";
-import { UserPlus, Check, X, ShieldBan, UserMinus, Users, MessageCircle } from "lucide-react";
+import { UserPlus, Users } from "lucide-react";
 import { toast } from "sonner";
 import { AppShell, EmptyState, SearchField } from "@/components/echo/app-shell";
-import { EchoAvatar, PresenceLabel } from "@/components/echo/avatar";
+import { EchoAvatar } from "@/components/echo/avatar";
 import {
-  blockedUsers,
-  friendRequests,
-  suggestedFriends,
-  users,
-  type EchoUser,
-} from "@/lib/echo-data";
+  useDiscoverProfiles,
+  useFriendships,
+  useRespondFriendRequest,
+  useSearchProfiles,
+  useSendFriendRequest,
+  useUpdateFriendship,
+} from "@/lib/echo-queries";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/friends")({
   head: () => ({
     meta: [
-      { title: "Friends — Echo" },
+      { title: "Friends — find people by @username on Echo" },
       {
         name: "description",
-        content:
-          "Manage friend requests, find people by username, see mutual friends and control who can reach you on Echo.",
+        content: "Search Echo by @username, review friend requests and discover new people.",
       },
       { property: "og:title", content: "Friends — Echo" },
-      {
-        property: "og:description",
-        content: "Friend requests, suggestions, mutual friends and blocked accounts in one place.",
-      },
+      { property: "og:description", content: "Add friends on Echo with usernames, not numbers." },
     ],
   }),
   component: FriendsPage,
 });
 
-type Tab = "friends" | "requests" | "suggested" | "blocked";
+type Tab = "friends" | "requests" | "discover";
 
 function FriendsPage() {
   const [tab, setTab] = useState<Tab>("friends");
   const [query, setQuery] = useState("");
-  const [requests, setRequests] = useState(friendRequests);
+  const friendships = useFriendships();
+  const search = useSearchProfiles(query);
+  const discover = useDiscoverProfiles();
+  const sendRequest = useSendFriendRequest();
+  const respond = useRespondFriendRequest();
+  const update = useUpdateFriendship();
 
-  const filtered = users.filter(
-    (u) =>
-      u.displayName.toLowerCase().includes(query.toLowerCase()) ||
-      u.username.toLowerCase().includes(query.toLowerCase()),
+  const edges = friendships.data ?? [];
+  const friends = edges.filter((e) => e.status === "accepted");
+  const requests = edges.filter((e) => e.status === "pending");
+  const known = new Set(edges.map((e) => e.profile.id));
+  const people = (query.trim() ? (search.data ?? []) : (discover.data ?? [])).filter(
+    (p) => !known.has(p.id),
   );
 
-  return (
-    <AppShell
-      title="Friends"
-      subtitle={`${users.length} friends · ${requests.length} pending requests`}
-      actions={
-        <button
-          onClick={() => toast("Invite link copied", { description: "echo.app/i/skyfox" })}
-          className="inline-flex h-9 items-center gap-1.5 rounded-full bg-primary px-3.5 text-sm font-semibold text-primary-foreground shadow-soft"
-        >
-          <UserPlus className="h-4 w-4" />
-          <span className="hidden sm:inline">Invite</span>
-        </button>
-      }
-    >
-      <div className="mx-auto w-full max-w-3xl px-4 py-5 sm:px-6">
-        <SearchField value={query} onChange={setQuery} placeholder="Search by username" />
+  const tabs: { key: Tab; label: string; count: number }[] = [
+    { key: "friends", label: "Friends", count: friends.length },
+    { key: "requests", label: "Requests", count: requests.length },
+    { key: "discover", label: "Discover", count: 0 },
+  ];
 
-        <div className="mt-3 flex gap-1.5 overflow-x-auto pb-1">
-          {(
-            [
-              ["friends", "All friends"],
-              ["requests", `Requests (${requests.length})`],
-              ["suggested", "Suggested"],
-              ["blocked", "Blocked"],
-            ] as const
-          ).map(([key, label]) => (
+  return (
+    <AppShell title="Friends" subtitle={`${friends.length} connected`}>
+      <div className="mx-auto max-w-2xl px-4 py-4 sm:px-6">
+        <SearchField value={query} onChange={setQuery} placeholder="Search @username or name" />
+        <div className="mt-3 flex gap-1.5">
+          {tabs.map((t) => (
             <button
-              key={key}
-              onClick={() => setTab(key)}
+              key={t.key}
+              onClick={() => setTab(t.key)}
               className={cn(
-                "shrink-0 rounded-full border px-3.5 py-1.5 text-xs font-medium transition-colors",
-                tab === key
-                  ? "border-primary/40 bg-primary/15 text-foreground"
-                  : "border-border bg-surface text-muted-foreground hover:text-foreground",
+                "rounded-full px-3 py-1.5 text-xs font-semibold transition-colors",
+                tab === t.key
+                  ? "bg-primary text-primary-foreground"
+                  : "border border-border bg-surface text-muted-foreground",
               )}
             >
-              {label}
+              {t.label}
+              {t.count ? ` · ${t.count}` : ""}
             </button>
           ))}
         </div>
 
-        <div className="mt-4 space-y-2.5">
+        <div className="mt-4 space-y-2">
           {tab === "friends" &&
-            (filtered.length ? (
-              filtered.map((u) => <FriendCard key={u.id} user={u} />)
-            ) : (
+            (friends.length === 0 ? (
               <EmptyState
                 icon={Users}
-                title="No matches"
-                detail="Try a different username — people on Echo are found by @handle."
+                title="No friends yet"
+                detail="Search for an @username or check the Discover tab."
               />
+            ) : (
+              friends.map((f) => (
+                <Row key={f.id} name={f.profile.displayName} handle={f.profile.username} avatar={f.profile.avatar} color={f.profile.color}>
+                  <button
+                    onClick={() => update.mutate({ id: f.id, remove: true })}
+                    className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground"
+                  >
+                    Remove
+                  </button>
+                </Row>
+              ))
             ))}
 
           {tab === "requests" &&
-            (requests.length ? (
-              requests.map((r) => (
-                <article
-                  key={r.id}
-                  className="animate-pop rounded-3xl border border-border bg-surface p-4 shadow-soft"
-                >
-                  <div className="flex items-start gap-3">
-                    <EchoAvatar initials={r.user.avatar} color={r.user.color} />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-semibold">{r.user.displayName}</p>
-                      <p className="truncate text-xs text-muted-foreground">
-                        {r.user.username} · {r.user.mutuals} mutual · {r.time}
-                      </p>
-                      <p className="mt-1.5 text-sm text-foreground/90">{r.note}</p>
-                    </div>
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      onClick={() => {
-                        setRequests((p) => p.filter((x) => x.id !== r.id));
-                        toast(`${r.user.username} is now a friend`);
-                      }}
-                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full bg-primary py-2 text-sm font-semibold text-primary-foreground"
-                    >
-                      <Check className="h-4 w-4" /> Accept
-                    </button>
-                    <button
-                      onClick={() => {
-                        setRequests((p) => p.filter((x) => x.id !== r.id));
-                        toast("Request declined");
-                      }}
-                      className="inline-flex flex-1 items-center justify-center gap-1.5 rounded-full border border-border py-2 text-sm font-medium"
-                    >
-                      <X className="h-4 w-4" /> Decline
-                    </button>
-                  </div>
-                </article>
-              ))
+            (requests.length === 0 ? (
+              <EmptyState icon={UserPlus} title="No pending requests" detail="You're all caught up." />
             ) : (
-              <EmptyState
-                icon={UserPlus}
-                title="No pending requests"
-                detail="Share your invite link and people can add you by username."
-              />
+              requests.map((r) => (
+                <Row key={r.id} name={r.profile.displayName} handle={r.profile.username} avatar={r.profile.avatar} color={r.profile.color}>
+                  {r.incoming ? (
+                    <>
+                      <button
+                        onClick={() =>
+                          respond.mutate({ id: r.id, accept: true, otherId: r.profile.id })
+                        }
+                        className="rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"
+                      >
+                        Accept
+                      </button>
+                      <button
+                        onClick={() =>
+                          respond.mutate({ id: r.id, accept: false, otherId: r.profile.id })
+                        }
+                        className="rounded-full border border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground"
+                      >
+                        Decline
+                      </button>
+                    </>
+                  ) : (
+                    <span className="text-xs text-muted-foreground">Request sent</span>
+                  )}
+                </Row>
+              ))
             ))}
 
-          {tab === "suggested" &&
-            suggestedFriends.map((u) => <FriendCard key={u.id} user={u} suggested />)}
-
-          {tab === "blocked" &&
-            (blockedUsers.length ? (
-              blockedUsers.map((b) => (
-                <div
-                  key={b.id}
-                  className="flex items-center gap-3 rounded-3xl border border-border bg-surface p-4"
-                >
-                  <EchoAvatar initials="DD" color="oklch(0.55 0.02 250)" />
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold">{b.displayName}</p>
-                    <p className="truncate text-xs text-muted-foreground">
-                      {b.username} · blocked {b.time} · {b.reason}
-                    </p>
-                  </div>
-                  <button
-                    onClick={() => toast("Unblocked")}
-                    className="rounded-full border border-border px-3.5 py-1.5 text-xs font-medium"
-                  >
-                    Unblock
-                  </button>
-                </div>
-              ))
+          {tab === "discover" &&
+            (people.length === 0 ? (
+              <EmptyState
+                icon={UserPlus}
+                title="Nobody to show"
+                detail="Try searching for an exact @username."
+              />
             ) : (
-              <EmptyState icon={ShieldBan} title="No blocked users" detail="Your list is clean." />
+              people.map((p) => (
+                <Row key={p.id} name={p.displayName} handle={p.username} avatar={p.avatar} color={p.color}>
+                  <button
+                    onClick={() =>
+                      sendRequest.mutate(
+                        { userId: p.id, displayName: p.displayName },
+                        { onSuccess: () => toast.success(`Request sent to ${p.username}`) },
+                      )
+                    }
+                    className="rounded-full bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground"
+                  >
+                    Add
+                  </button>
+                </Row>
+              ))
             ))}
         </div>
       </div>
@@ -179,42 +160,27 @@ function FriendsPage() {
   );
 }
 
-function FriendCard({ user, suggested }: { user: EchoUser; suggested?: boolean }) {
+function Row({
+  name,
+  handle,
+  avatar,
+  color,
+  children,
+}: {
+  name: string;
+  handle: string;
+  avatar: string;
+  color: string;
+  children: React.ReactNode;
+}) {
   return (
-    <article className="flex items-center gap-3 rounded-3xl border border-border bg-surface p-3.5 shadow-soft transition-shadow hover:shadow-lift">
-      <EchoAvatar initials={user.avatar} color={user.color} presence={user.presence} />
+    <div className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-3.5">
+      <EchoAvatar initials={avatar} color={color} size="sm" />
       <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold">{user.displayName}</p>
-        <p className="truncate text-xs text-muted-foreground">
-          {user.username} · {user.mutuals} mutual friends
-        </p>
-        <PresenceLabel presence={user.presence} lastSeen={user.lastSeen} />
+        <p className="truncate text-sm font-semibold">{name}</p>
+        <p className="truncate text-xs text-muted-foreground">{handle}</p>
       </div>
-      {suggested ? (
-        <button
-          onClick={() => toast(`Friend request sent to ${user.username}`)}
-          className="inline-flex items-center gap-1.5 rounded-full bg-primary px-3.5 py-1.5 text-xs font-semibold text-primary-foreground"
-        >
-          <UserPlus className="h-3.5 w-3.5" /> Add
-        </button>
-      ) : (
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => toast(`Opening chat with ${user.username}`)}
-            className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-secondary hover:text-foreground"
-            aria-label="Message"
-          >
-            <MessageCircle className="h-[18px] w-[18px]" />
-          </button>
-          <button
-            onClick={() => toast("Friend removed")}
-            className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-secondary hover:text-destructive"
-            aria-label="Remove friend"
-          >
-            <UserMinus className="h-[18px] w-[18px]" />
-          </button>
-        </div>
-      )}
-    </article>
+      <div className="flex shrink-0 gap-1.5">{children}</div>
+    </div>
   );
 }
