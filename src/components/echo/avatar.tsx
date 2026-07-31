@@ -27,19 +27,31 @@ export function EchoAvatar({
 }) {
   return (
     <span className={cn("relative inline-flex shrink-0", className)}>
-      <span
-        className={cn(
-          "inline-flex items-center justify-center font-semibold tracking-tight text-white/95",
-          square ? "rounded-2xl" : "rounded-full",
-          sizes[size],
-        )}
-        style={{
-          background: `linear-gradient(150deg, ${color}, color-mix(in oklab, ${color} 62%, black))`,
-        }}
-        aria-hidden="true"
-      >
-        {initials}
-      </span>
+      {avatarUrl ? (
+        <img
+          src={avatarUrl}
+          alt={initials}
+          className={cn(
+            "inline-flex h-full w-full items-center justify-center object-cover",
+            square ? "rounded-2xl" : "rounded-full",
+            sizes[size],
+          )}
+        />
+      ) : (
+        <span
+          className={cn(
+            "inline-flex items-center justify-center font-semibold tracking-tight text-white/95",
+            square ? "rounded-2xl" : "rounded-full",
+            sizes[size],
+          )}
+          style={{
+            background: `linear-gradient(150deg, ${color}, color-mix(in oklab, ${color} 62%, black))`,
+          }}
+          aria-hidden="true"
+        >
+          {initials}
+        </span>
+      )}
       {presence ? (
         <span
           className={cn(
