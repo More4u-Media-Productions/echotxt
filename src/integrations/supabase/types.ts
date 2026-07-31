@@ -14,16 +14,413 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      calls: {
+        Row: {
+          caller_id: string
+          conversation_id: string
+          duration_seconds: number
+          ended_at: string | null
+          id: string
+          media: Database["public"]["Enums"]["call_media"]
+          started_at: string
+          status: Database["public"]["Enums"]["call_status"]
+          voicemail_transcript: string | null
+        }
+        Insert: {
+          caller_id: string
+          conversation_id: string
+          duration_seconds?: number
+          ended_at?: string | null
+          id?: string
+          media?: Database["public"]["Enums"]["call_media"]
+          started_at?: string
+          status?: Database["public"]["Enums"]["call_status"]
+          voicemail_transcript?: string | null
+        }
+        Update: {
+          caller_id?: string
+          conversation_id?: string
+          duration_seconds?: number
+          ended_at?: string | null
+          id?: string
+          media?: Database["public"]["Enums"]["call_media"]
+          started_at?: string
+          status?: Database["public"]["Enums"]["call_status"]
+          voicemail_transcript?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "calls_caller_id_fkey"
+            columns: ["caller_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "calls_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversation_members: {
+        Row: {
+          accepted: boolean
+          archived: boolean
+          conversation_id: string
+          joined_at: string
+          last_read_at: string
+          muted: boolean
+          pinned: boolean
+          role: string
+          user_id: string
+        }
+        Insert: {
+          accepted?: boolean
+          archived?: boolean
+          conversation_id: string
+          joined_at?: string
+          last_read_at?: string
+          muted?: boolean
+          pinned?: boolean
+          role?: string
+          user_id: string
+        }
+        Update: {
+          accepted?: boolean
+          archived?: boolean
+          conversation_id?: string
+          joined_at?: string
+          last_read_at?: string
+          muted?: boolean
+          pinned?: boolean
+          role?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversation_members_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_members_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      conversations: {
+        Row: {
+          avatar_color: string
+          created_at: string
+          created_by: string
+          description: string | null
+          id: string
+          kind: Database["public"]["Enums"]["conversation_kind"]
+          last_message_at: string
+          title: string | null
+        }
+        Insert: {
+          avatar_color?: string
+          created_at?: string
+          created_by: string
+          description?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["conversation_kind"]
+          last_message_at?: string
+          title?: string | null
+        }
+        Update: {
+          avatar_color?: string
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["conversation_kind"]
+          last_message_at?: string
+          title?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "conversations_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      friendships: {
+        Row: {
+          addressee_id: string
+          created_at: string
+          id: string
+          note: string | null
+          requester_id: string
+          status: Database["public"]["Enums"]["friendship_status"]
+          updated_at: string
+        }
+        Insert: {
+          addressee_id: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          requester_id: string
+          status?: Database["public"]["Enums"]["friendship_status"]
+          updated_at?: string
+        }
+        Update: {
+          addressee_id?: string
+          created_at?: string
+          id?: string
+          note?: string | null
+          requester_id?: string
+          status?: Database["public"]["Enums"]["friendship_status"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "friendships_addressee_id_fkey"
+            columns: ["addressee_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "friendships_requester_id_fkey"
+            columns: ["requester_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_reactions: {
+        Row: {
+          created_at: string
+          emoji: string
+          message_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          emoji: string
+          message_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          emoji?: string
+          message_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_reactions_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_reactions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      messages: {
+        Row: {
+          body: string
+          conversation_id: string
+          created_at: string
+          edited_at: string | null
+          id: string
+          kind: Database["public"]["Enums"]["message_kind"]
+          metadata: Json
+          pinned: boolean
+          reply_to: string | null
+          sender_id: string
+        }
+        Insert: {
+          body?: string
+          conversation_id: string
+          created_at?: string
+          edited_at?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["message_kind"]
+          metadata?: Json
+          pinned?: boolean
+          reply_to?: string | null
+          sender_id: string
+        }
+        Update: {
+          body?: string
+          conversation_id?: string
+          created_at?: string
+          edited_at?: string | null
+          id?: string
+          kind?: Database["public"]["Enums"]["message_kind"]
+          metadata?: Json
+          pinned?: boolean
+          reply_to?: string | null
+          sender_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "messages_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_reply_to_fkey"
+            columns: ["reply_to"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "messages_sender_id_fkey"
+            columns: ["sender_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notifications: {
+        Row: {
+          actor_id: string | null
+          conversation_id: string | null
+          created_at: string
+          detail: string
+          id: string
+          read: boolean
+          title: string
+          type: string
+          user_id: string
+        }
+        Insert: {
+          actor_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          detail?: string
+          id?: string
+          read?: boolean
+          title: string
+          type: string
+          user_id: string
+        }
+        Update: {
+          actor_id?: string | null
+          conversation_id?: string | null
+          created_at?: string
+          detail?: string
+          id?: string
+          read?: boolean
+          title?: string
+          type?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notifications_actor_id_fkey"
+            columns: ["actor_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_conversation_id_fkey"
+            columns: ["conversation_id"]
+            isOneToOne: false
+            referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "notifications_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      profiles: {
+        Row: {
+          avatar_color: string
+          bio: string
+          created_at: string
+          display_name: string
+          id: string
+          last_seen: string
+          presence: Database["public"]["Enums"]["presence_state"]
+          pronouns: string | null
+          updated_at: string
+          username: string
+        }
+        Insert: {
+          avatar_color?: string
+          bio?: string
+          created_at?: string
+          display_name?: string
+          id: string
+          last_seen?: string
+          presence?: Database["public"]["Enums"]["presence_state"]
+          pronouns?: string | null
+          updated_at?: string
+          username: string
+        }
+        Update: {
+          avatar_color?: string
+          bio?: string
+          created_at?: string
+          display_name?: string
+          id?: string
+          last_seen?: string
+          presence?: Database["public"]["Enums"]["presence_state"]
+          pronouns?: string | null
+          updated_at?: string
+          username?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      is_member: {
+        Args: { _conversation_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      call_media: "voice" | "video"
+      call_status: "ringing" | "answered" | "missed" | "declined" | "voicemail"
+      conversation_kind: "dm" | "group"
+      friendship_status: "pending" | "accepted" | "blocked"
+      message_kind:
+        | "text"
+        | "image"
+        | "voice"
+        | "file"
+        | "poll"
+        | "voicemail"
+        | "event"
+        | "system"
+      presence_state: "online" | "away" | "offline"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -150,6 +547,22 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      call_media: ["voice", "video"],
+      call_status: ["ringing", "answered", "missed", "declined", "voicemail"],
+      conversation_kind: ["dm", "group"],
+      friendship_status: ["pending", "accepted", "blocked"],
+      message_kind: [
+        "text",
+        "image",
+        "voice",
+        "file",
+        "poll",
+        "voicemail",
+        "event",
+        "system",
+      ],
+      presence_state: ["online", "away", "offline"],
+    },
   },
 } as const
