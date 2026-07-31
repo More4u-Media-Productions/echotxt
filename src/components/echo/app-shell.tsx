@@ -1,4 +1,4 @@
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import {
   MessageCircle,
   Users,
@@ -13,15 +13,8 @@ import {
 import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { EchoAvatar } from "./avatar";
-import { me } from "@/lib/echo-data";
-
-const tabs = [
-  { to: "/", label: "Chats", icon: MessageCircle, badge: 8 },
-  { to: "/friends", label: "Friends", icon: Users, badge: 2 },
-  { to: "/calls", label: "Calls", icon: Phone, badge: 0 },
-  { to: "/activity", label: "Activity", icon: Bell, badge: 3 },
-  { to: "/profile", label: "Profile", icon: User, badge: 0 },
-] as const;
+import { useMyProfile, useSession } from "@/lib/session";
+import { useChats, useEchoRealtime, useFriendships, useNotifications } from "@/lib/echo-queries";
 
 function useTheme() {
   const [dark, setDark] = useState(true);
@@ -46,10 +39,44 @@ export function AppShell({
 }) {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const { dark, toggle } = useTheme();
+  const navigate = useNavigate();
+  const { session, loading } = useSession();
+  const profile = useMyProfile();
+  const chats = useChats();
+  const friends = useFriendships();
+  const notifications = useNotifications();
+  useEchoRealtime();
+
+  useEffect(() => {
+    if (!loading && !session) void navigate({ to: "/auth", replace: true });
+  }, [loading, session, navigate]);
+
+  if (loading || !session) {
+    return (
+      <div className="grid min-h-screen place-items-center bg-background text-muted-foreground">
+        <span className="text-sm">Loading Echo…</span>
+      </div>
+    );
+  }
+
+  const unreadChats = (chats.data ?? []).reduce((n, c) => n + (c.archived ? 0 : c.unread), 0);
+  const pendingFriends = (friends.data ?? []).filter(
+    (f) => f.status === "pending" && f.incoming,
+  ).length;
+  const unreadActivity = (notifications.data ?? []).filter((n) => n.unread).length;
+
+  const tabs = [
+    { to: "/", label: "Chats", icon: MessageCircle, badge: unreadChats },
+    { to: "/friends", label: "Friends", icon: Users, badge: pendingFriends },
+    { to: "/calls", label: "Calls", icon: Phone, badge: 0 },
+    { to: "/activity", label: "Activity", icon: Bell, badge: unreadActivity },
+    { to: "/profile", label: "Profile", icon: User, badge: 0 },
+  ] as const;
+
+  const me = profile.data;
 
   return (
     <div className="flex min-h-screen w-full bg-background text-foreground">
-      {/* Desktop rail */}
       <aside className="sticky top-0 hidden h-screen w-[248px] shrink-0 flex-col border-r border-border bg-sidebar px-4 py-6 lg:flex">
         <div className="flex items-center gap-2.5 px-2">
           <span className="grid h-9 w-9 place-items-center rounded-2xl bg-primary text-primary-foreground">
@@ -99,21 +126,24 @@ export function AppShell({
             className="flex items-center gap-3 rounded-2xl border border-border bg-surface p-2.5"
           >
             <EchoAvatar
-              initials={me.avatar}
-              color={me.color}
-              presence={me.presence}
+              initials={me?.avatar ?? "…"}
+              color={me?.color ?? "oklch(0.63 0.13 195)"}
+              presence={me?.presence ?? "online"}
               size="sm"
             />
             <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-semibold">{me.displayName}</span>
-              <span className="block truncate text-xs text-muted-foreground">{me.username}</span>
+              <span className="block truncate text-sm font-semibold">
+                {me?.displayName ?? "Your profile"}
+              </span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {me?.username ?? ""}
+              </span>
             </span>
             <Settings className="h-4 w-4 shrink-0 text-muted-foreground" />
           </Link>
         </div>
       </aside>
 
-      {/* Main */}
       <div className="flex min-w-0 flex-1 flex-col pb-[68px] lg:pb-0">
         <header className="glass sticky top-0 z-30 border-b border-border">
           <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-3 px-4 py-3.5 sm:px-6">
@@ -130,7 +160,11 @@ export function AppShell({
                 className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground lg:hidden"
                 aria-label="Toggle theme"
               >
-                {dark ? <Sun className="h-[18px] w-[18px]" /> : <Moon className="h-[18px] w-[18px]" />}
+                {dark ? (
+                  <Sun className="h-[18px] w-[18px]" />
+                ) : (
+                  <Moon className="h-[18px] w-[18px]" />
+                )}
               </button>
             </div>
           </div>
@@ -139,7 +173,6 @@ export function AppShell({
         <main className={cn("min-w-0 flex-1", contentClassName)}>{children}</main>
       </div>
 
-      {/* Mobile tab bar */}
       <nav className="glass fixed inset-x-0 bottom-0 z-40 border-t border-border lg:hidden">
         <div className="mx-auto grid max-w-lg grid-cols-5">
           {tabs.map((tab) => {
