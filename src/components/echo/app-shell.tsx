@@ -18,9 +18,9 @@ import { me } from "@/lib/echo-data";
 const tabs = [
   { to: "/", label: "Chats", icon: MessageCircle, badge: 8 },
   { to: "/friends", label: "Friends", icon: Users, badge: 2 },
-  { to: "/calls", label: "Calls", icon: Phone },
+  { to: "/calls", label: "Calls", icon: Phone, badge: 0 },
   { to: "/activity", label: "Activity", icon: Bell, badge: 3 },
-  { to: "/profile", label: "Profile", icon: User },
+  { to: "/profile", label: "Profile", icon: User, badge: 0 },
 ] as const;
 
 function useTheme() {
