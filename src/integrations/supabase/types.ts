@@ -119,6 +119,8 @@ export type Database = {
       conversations: {
         Row: {
           avatar_color: string
+          avatar_url: string | null
+          banner_url: string | null
           created_at: string
           created_by: string
           description: string | null
@@ -129,6 +131,8 @@ export type Database = {
         }
         Insert: {
           avatar_color?: string
+          avatar_url?: string | null
+          banner_url?: string | null
           created_at?: string
           created_by: string
           description?: string | null
@@ -139,6 +143,8 @@ export type Database = {
         }
         Update: {
           avatar_color?: string
+          avatar_url?: string | null
+          banner_url?: string | null
           created_at?: string
           created_by?: string
           description?: string | null
@@ -238,8 +244,40 @@ export type Database = {
           },
         ]
       }
+      message_read_receipts: {
+        Row: {
+          id: string
+          message_id: string
+          read_at: string
+          user_id: string
+        }
+        Insert: {
+          id?: string
+          message_id: string
+          read_at?: string
+          user_id: string
+        }
+        Update: {
+          id?: string
+          message_id?: string
+          read_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_read_receipts_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       messages: {
         Row: {
+          attachment_name: string | null
+          attachment_type: string | null
+          attachment_url: string | null
           body: string
           conversation_id: string
           created_at: string
@@ -252,6 +290,9 @@ export type Database = {
           sender_id: string
         }
         Insert: {
+          attachment_name?: string | null
+          attachment_type?: string | null
+          attachment_url?: string | null
           body?: string
           conversation_id: string
           created_at?: string
@@ -264,6 +305,9 @@ export type Database = {
           sender_id: string
         }
         Update: {
+          attachment_name?: string | null
+          attachment_type?: string | null
+          attachment_url?: string | null
           body?: string
           conversation_id?: string
           created_at?: string
@@ -360,36 +404,45 @@ export type Database = {
       profiles: {
         Row: {
           avatar_color: string
+          avatar_url: string | null
+          banner_url: string | null
           bio: string
           created_at: string
           display_name: string
           id: string
           last_seen: string
           presence: Database["public"]["Enums"]["presence_state"]
+          privacy_settings: Json
           pronouns: string | null
           updated_at: string
           username: string
         }
         Insert: {
           avatar_color?: string
+          avatar_url?: string | null
+          banner_url?: string | null
           bio?: string
           created_at?: string
           display_name?: string
           id: string
           last_seen?: string
           presence?: Database["public"]["Enums"]["presence_state"]
+          privacy_settings?: Json
           pronouns?: string | null
           updated_at?: string
           username: string
         }
         Update: {
           avatar_color?: string
+          avatar_url?: string | null
+          banner_url?: string | null
           bio?: string
           created_at?: string
           display_name?: string
           id?: string
           last_seen?: string
           presence?: Database["public"]["Enums"]["presence_state"]
+          privacy_settings?: Json
           pronouns?: string | null
           updated_at?: string
           username?: string
