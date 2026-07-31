@@ -21,6 +21,8 @@ export interface EchoProfile {
   pronouns: string | null;
   color: string;
   avatar: string;
+  avatarUrl: string | null;
+  bannerUrl: string | null;
   presence: Presence;
   lastSeen: string;
   joined: string;
