@@ -41,6 +41,7 @@ export function useEchoRealtime() {
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "conversation_members" }, () => {
         void queryClient.invalidateQueries({ queryKey: ["chats"] });
+        void queryClient.invalidateQueries({ queryKey: ["group-members"] });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "friendships" }, () => {
         void queryClient.invalidateQueries({ queryKey: ["friendships"] });
@@ -81,6 +82,17 @@ export function useConversationRealtime(conversationId: string | null) {
       .on("postgres_changes", { event: "*", schema: "public", table: "message_read_receipts" }, () =>
         queryClient.invalidateQueries({ queryKey: ["receipts", conversationId] }),
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "conversation_members", filter },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: ["group-members", conversationId] });
+          void queryClient.invalidateQueries({ queryKey: ["chats"] });
+        },
+      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => {
+        void queryClient.invalidateQueries({ queryKey: ["chats"] });
+      })
       .subscribe();
 
     return () => {
