@@ -156,6 +156,11 @@ export function useChats() {
             lastActivity: relativeTime(last?.created_at ?? convo.last_message_at),
             lastMessage: last ? previewOf(last.kind, last.body) : null,
             lastMessageAt: last?.created_at ?? convo.last_message_at,
+            createdBy: convo.created_by,
+            myRole: (row.role as GroupRole) ?? "member",
+            onlyAdminsPost: convo.only_admins_post,
+            onlyAdminsInvite: convo.only_admins_invite,
+
           };
           if (!isGroup && otherProfile) {
             chat.presence = otherProfile.presence;
