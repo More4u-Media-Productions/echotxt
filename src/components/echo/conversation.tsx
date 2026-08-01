@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { AlertCircle, ArrowLeft, Check, CheckCheck, Clock, Phone, Send, Smile, Video } from "lucide-react";
 import { EchoAvatar } from "./avatar";
+import { GroupPanel } from "./group-panel";
 import { cn } from "@/lib/utils";
 import { useUserId, useMyProfile } from "@/lib/session";
 import type { EchoChat, EchoMessage } from "@/lib/echo-data";
@@ -54,6 +55,7 @@ export function Conversation({
   const markRead = useMarkRead();
   const discardFailed = useDiscardFailedMessage();
   const [draft, setDraft] = useState("");
+  const [panelOpen, setPanelOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -76,6 +78,8 @@ export function Conversation({
   );
   const someoneOnline = others.some((id) => onlineIds.includes(id));
   const receiptMap = receipts.data ?? {};
+  const isGroup = chat.kind === "group";
+  const postingLocked = isGroup && chat.onlyAdminsPost && chat.myRole === "member";
 
   const lastId = list.length ? list[list.length - 1]!.id : null;
   useEffect(() => {
@@ -129,25 +133,46 @@ export function Conversation({
             <ArrowLeft className="h-5 w-5" />
           </button>
         ) : null}
-        <EchoAvatar
-          initials={chat.avatar}
-          color={chat.color}
-          avatarUrl={chat.avatarUrl}
-          {...(chat.presence ? { presence: chat.presence } : {})}
-          size="sm"
-        />
-        <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-semibold">{chat.name}</p>
-          <p className="truncate text-xs text-muted-foreground">
-            {typing.length
-              ? `${typing.join(", ")} is typing…`
-              : chat.kind === "group"
-                ? `${chat.members} members`
-                : someoneOnline
-                  ? "Online"
-                  : chat.handle}
-          </p>
-        </div>
+        {isGroup ? (
+          <button
+            onClick={() => setPanelOpen(true)}
+            className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl px-1 py-1 text-left hover:bg-secondary/60"
+            aria-label="Group details"
+          >
+            <EchoAvatar
+              initials={chat.avatar}
+              color={chat.color}
+              avatarUrl={chat.avatarUrl}
+              size="sm"
+            />
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-semibold">{chat.name}</span>
+              <span className="block truncate text-xs text-muted-foreground">
+                {typing.length ? `${typing.join(", ")} is typing…` : `${chat.members} members`}
+              </span>
+            </span>
+          </button>
+        ) : (
+          <>
+            <EchoAvatar
+              initials={chat.avatar}
+              color={chat.color}
+              avatarUrl={chat.avatarUrl}
+              {...(chat.presence ? { presence: chat.presence } : {})}
+              size="sm"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-semibold">{chat.name}</p>
+              <p className="truncate text-xs text-muted-foreground">
+                {typing.length
+                  ? `${typing.join(", ")} is typing…`
+                  : someoneOnline
+                    ? "Online"
+                    : chat.handle}
+              </p>
+            </div>
+          </>
+        )}
         <button
           onClick={() => onCall?.("voice")}
           className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-secondary"
@@ -196,6 +221,16 @@ export function Conversation({
         ) : null}
 
         {list.map((m) => {
+          if (m.kind === "system") {
+            return (
+              <p
+                key={m.id}
+                className="mx-auto max-w-[85%] rounded-full bg-secondary/60 px-3 py-1 text-center text-[11px] text-muted-foreground"
+              >
+                {m.authorName} {m.body} · {m.time}
+              </p>
+            );
+          }
           const mine = m.authorId === userId;
           const readers = (receiptMap[m.id] ?? []).filter((id) => id !== userId);
           const read = others.length > 0 && others.every((id) => readers.includes(id));
