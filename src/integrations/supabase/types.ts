@@ -70,6 +70,8 @@ export type Database = {
           accepted: boolean
           archived: boolean
           conversation_id: string
+          invited_at: string
+          invited_by: string | null
           joined_at: string
           last_read_at: string
           muted: boolean
@@ -81,6 +83,8 @@ export type Database = {
           accepted?: boolean
           archived?: boolean
           conversation_id: string
+          invited_at?: string
+          invited_by?: string | null
           joined_at?: string
           last_read_at?: string
           muted?: boolean
@@ -92,6 +96,8 @@ export type Database = {
           accepted?: boolean
           archived?: boolean
           conversation_id?: string
+          invited_at?: string
+          invited_by?: string | null
           joined_at?: string
           last_read_at?: string
           muted?: boolean
@@ -105,6 +111,13 @@ export type Database = {
             columns: ["conversation_id"]
             isOneToOne: false
             referencedRelation: "conversations"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "conversation_members_invited_by_fkey"
+            columns: ["invited_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
           {
@@ -128,6 +141,8 @@ export type Database = {
           id: string
           kind: Database["public"]["Enums"]["conversation_kind"]
           last_message_at: string
+          only_admins_invite: boolean
+          only_admins_post: boolean
           title: string | null
         }
         Insert: {
@@ -141,6 +156,8 @@ export type Database = {
           id?: string
           kind?: Database["public"]["Enums"]["conversation_kind"]
           last_message_at?: string
+          only_admins_invite?: boolean
+          only_admins_post?: boolean
           title?: string | null
         }
         Update: {
@@ -154,6 +171,8 @@ export type Database = {
           id?: string
           kind?: Database["public"]["Enums"]["conversation_kind"]
           last_message_at?: string
+          only_admins_invite?: boolean
+          only_admins_post?: boolean
           title?: string | null
         }
         Relationships: [
@@ -470,6 +489,23 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      add_group_members: {
+        Args: { _cid: string; _ids: string[] }
+        Returns: number
+      }
+      conversation_role: {
+        Args: { _cid: string; _uid: string }
+        Returns: string
+      }
+      create_group: {
+        Args: {
+          _avatar_color?: string
+          _description?: string
+          _member_ids?: string[]
+          _title: string
+        }
+        Returns: string
+      }
       friendship_state: {
         Args: { _other: string }
         Returns: {
@@ -479,10 +515,34 @@ export type Database = {
           status: string
         }[]
       }
+      group_members: {
+        Args: { _cid: string }
+        Returns: {
+          accepted: boolean
+          avatar_color: string
+          avatar_url: string
+          display_name: string
+          invited_by: string
+          joined_at: string
+          presence: Database["public"]["Enums"]["presence_state"]
+          role: string
+          user_id: string
+          username: string
+        }[]
+      }
       is_blocked_with: { Args: { _other: string }; Returns: boolean }
+      is_conversation_admin: {
+        Args: { _cid: string; _uid: string }
+        Returns: boolean
+      }
       is_member: {
         Args: { _conversation_id: string; _user_id: string }
         Returns: boolean
+      }
+      leave_group: { Args: { _cid: string }; Returns: undefined }
+      post_system_message: {
+        Args: { _actor: string; _body: string; _cid: string }
+        Returns: undefined
       }
       public_profile: {
         Args: { _id: string }
@@ -502,6 +562,14 @@ export type Database = {
           username: string
         }[]
       }
+      remove_group_member: {
+        Args: { _cid: string; _uid: string }
+        Returns: undefined
+      }
+      respond_group_invite: {
+        Args: { _accept: boolean; _cid: string }
+        Returns: undefined
+      }
       search_profiles: {
         Args: { _limit?: number; _term: string }
         Returns: {
@@ -519,7 +587,22 @@ export type Database = {
           username: string
         }[]
       }
+      set_group_role: {
+        Args: { _cid: string; _role: string; _uid: string }
+        Returns: undefined
+      }
       start_dm: { Args: { _other: string }; Returns: string }
+      update_group: {
+        Args: {
+          _avatar_color?: string
+          _cid: string
+          _description?: string
+          _only_admins_invite?: boolean
+          _only_admins_post?: boolean
+          _title?: string
+        }
+        Returns: undefined
+      }
     }
     Enums: {
       call_media: "voice" | "video"

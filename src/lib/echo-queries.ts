@@ -15,9 +15,12 @@ import {
   type EchoChat,
   type EchoMessage,
   type EchoProfile,
+  type GroupMember,
+  type GroupRole,
   type MessageKind,
   type Presence,
 } from "@/lib/echo-data";
+
 
 /* ---------------------------------- realtime --------------------------------- */
 
@@ -38,6 +41,7 @@ export function useEchoRealtime() {
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "conversation_members" }, () => {
         void queryClient.invalidateQueries({ queryKey: ["chats"] });
+        void queryClient.invalidateQueries({ queryKey: ["group-members"] });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "friendships" }, () => {
         void queryClient.invalidateQueries({ queryKey: ["friendships"] });
@@ -78,6 +82,17 @@ export function useConversationRealtime(conversationId: string | null) {
       .on("postgres_changes", { event: "*", schema: "public", table: "message_read_receipts" }, () =>
         queryClient.invalidateQueries({ queryKey: ["receipts", conversationId] }),
       )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "conversation_members", filter },
+        () => {
+          void queryClient.invalidateQueries({ queryKey: ["group-members", conversationId] });
+          void queryClient.invalidateQueries({ queryKey: ["chats"] });
+        },
+      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "conversations" }, () => {
+        void queryClient.invalidateQueries({ queryKey: ["chats"] });
+      })
       .subscribe();
 
     return () => {
@@ -107,7 +122,7 @@ export function useChats() {
       const [{ data: members }, { data: recent }] = await Promise.all([
         supabase
           .from("conversation_members")
-          .select("conversation_id, user_id, profiles(*)")
+          .select("conversation_id, user_id, profiles!conversation_members_user_id_fkey(*)")
           .in("conversation_id", ids),
         supabase
           .from("messages")
@@ -156,6 +171,11 @@ export function useChats() {
             lastActivity: relativeTime(last?.created_at ?? convo.last_message_at),
             lastMessage: last ? previewOf(last.kind, last.body) : null,
             lastMessageAt: last?.created_at ?? convo.last_message_at,
+            createdBy: convo.created_by,
+            myRole: (row.role as GroupRole) ?? "member",
+            onlyAdminsPost: convo.only_admins_post,
+            onlyAdminsInvite: convo.only_admins_invite,
+
           };
           if (!isGroup && otherProfile) {
             chat.presence = otherProfile.presence;
@@ -529,55 +549,179 @@ export function useStartDm() {
 }
 
 
-export function useCreateGroup() {
-  const userId = useUserId();
+/* ---------------------------------- groups ----------------------------------- */
+
+function useGroupInvalidate() {
   const queryClient = useQueryClient();
+  return (conversationId?: string) => {
+    void queryClient.invalidateQueries({ queryKey: ["chats"] });
+    void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    if (conversationId) {
+      void queryClient.invalidateQueries({ queryKey: ["group-members", conversationId] });
+      void queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
+    } else {
+      void queryClient.invalidateQueries({ queryKey: ["group-members"] });
+    }
+  };
+}
+
+interface GroupMemberRow {
+  user_id: string;
+  role: string;
+  accepted: boolean;
+  joined_at: string;
+  invited_by: string | null;
+  username: string;
+  display_name: string;
+  avatar_color: string;
+  avatar_url: string | null;
+  presence: Presence;
+}
+
+/** Roster for a group: roles, invite state and presence, ordered owner → members. */
+export function useGroupMembers(conversationId: string | null) {
+  const userId = useUserId();
+  return useQuery({
+    queryKey: ["group-members", conversationId],
+    enabled: !!conversationId && !!userId,
+    queryFn: async (): Promise<GroupMember[]> => {
+      const { data, error } = await supabase.rpc("group_members", { _cid: conversationId! });
+      if (error) throw error;
+      return ((data ?? []) as unknown as GroupMemberRow[]).map((row) => {
+        const name = row.display_name || row.username;
+        return {
+          id: row.user_id,
+          role: (row.role as GroupRole) ?? "member",
+          accepted: row.accepted,
+          joinedAt: row.joined_at,
+          invitedBy: row.invited_by,
+          username: `@${row.username}`,
+          displayName: name,
+          color: row.avatar_color,
+          avatar: initialsOf(name),
+          avatarUrl: row.avatar_url,
+          presence: row.presence,
+        } satisfies GroupMember;
+      });
+    },
+  });
+}
+
+export function useCreateGroup() {
+  const invalidate = useGroupInvalidate();
   return useMutation({
     mutationFn: async (input: {
       title: string;
       description?: string;
       memberIds: string[];
     }): Promise<string> => {
-      const { data: convo, error } = await supabase
-        .from("conversations")
-        .insert({
-          kind: "group",
-          title: input.title,
-          description: input.description ?? null,
-          created_by: userId!,
-        })
-        .select("id")
-        .single();
+      const { data, error } = await supabase.rpc("create_group", {
+        _title: input.title,
+        ...(input.description ? { _description: input.description } : {}),
+        _member_ids: input.memberIds,
+      });
       if (error) throw error;
-
-      const rows = [
-        { conversation_id: convo.id, user_id: userId!, role: "owner", accepted: true },
-        ...input.memberIds.map((id) => ({
-          conversation_id: convo.id,
-          user_id: id,
-          accepted: true,
-        })),
-      ];
-      const { error: memberError } = await supabase.from("conversation_members").insert(rows);
-      if (memberError) throw memberError;
-
-      if (input.memberIds.length) {
-        await supabase.from("notifications").insert(
-          input.memberIds.map((id) => ({
-            user_id: id,
-            actor_id: userId!,
-            conversation_id: convo.id,
-            type: "group_invite",
-            title: `Added to ${input.title}`,
-            detail: "You were added to a new group",
-          })),
-        );
-      }
-      return convo.id;
+      if (!data) throw new Error("Could not create that group.");
+      return data;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["chats"] }),
+    onSuccess: () => invalidate(),
   });
 }
+
+export function useAddGroupMembers() {
+  const invalidate = useGroupInvalidate();
+  return useMutation({
+    mutationFn: async (input: { conversationId: string; memberIds: string[] }) => {
+      const { data, error } = await supabase.rpc("add_group_members", {
+        _cid: input.conversationId,
+        _ids: input.memberIds,
+      });
+      if (error) throw error;
+      return data ?? 0;
+    },
+    onSuccess: (_d, input) => invalidate(input.conversationId),
+  });
+}
+
+export function useRemoveGroupMember() {
+  const invalidate = useGroupInvalidate();
+  return useMutation({
+    mutationFn: async (input: { conversationId: string; userId: string }) => {
+      const { error } = await supabase.rpc("remove_group_member", {
+        _cid: input.conversationId,
+        _uid: input.userId,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_d, input) => invalidate(input.conversationId),
+  });
+}
+
+export function useSetGroupRole() {
+  const invalidate = useGroupInvalidate();
+  return useMutation({
+    mutationFn: async (input: { conversationId: string; userId: string; role: GroupRole }) => {
+      const { error } = await supabase.rpc("set_group_role", {
+        _cid: input.conversationId,
+        _uid: input.userId,
+        _role: input.role,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_d, input) => invalidate(input.conversationId),
+  });
+}
+
+export function useUpdateGroup() {
+  const invalidate = useGroupInvalidate();
+  return useMutation({
+    mutationFn: async (input: {
+      conversationId: string;
+      title?: string;
+      description?: string | null;
+      onlyAdminsPost?: boolean;
+      onlyAdminsInvite?: boolean;
+    }) => {
+      const { error } = await supabase.rpc("update_group", {
+        _cid: input.conversationId,
+        ...(input.title !== undefined ? { _title: input.title } : {}),
+        ...(input.description !== undefined ? { _description: input.description ?? "" } : {}),
+        ...(input.onlyAdminsPost !== undefined ? { _only_admins_post: input.onlyAdminsPost } : {}),
+        ...(input.onlyAdminsInvite !== undefined
+          ? { _only_admins_invite: input.onlyAdminsInvite }
+          : {}),
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_d, input) => invalidate(input.conversationId),
+  });
+}
+
+export function useRespondGroupInvite() {
+  const invalidate = useGroupInvalidate();
+  return useMutation({
+    mutationFn: async (input: { conversationId: string; accept: boolean }) => {
+      const { error } = await supabase.rpc("respond_group_invite", {
+        _cid: input.conversationId,
+        _accept: input.accept,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_d, input) => invalidate(input.conversationId),
+  });
+}
+
+export function useLeaveGroup() {
+  const invalidate = useGroupInvalidate();
+  return useMutation({
+    mutationFn: async (conversationId: string) => {
+      const { error } = await supabase.rpc("leave_group", { _cid: conversationId });
+      if (error) throw error;
+    },
+    onSuccess: () => invalidate(),
+  });
+}
+
 
 /* ---------------------------------- friends ---------------------------------- */
 

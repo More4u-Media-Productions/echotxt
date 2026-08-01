@@ -1,10 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { MessageCircle } from "lucide-react";
+import { MessageCircle, Users } from "lucide-react";
 import { AppShell, EmptyState, SearchField } from "@/components/echo/app-shell";
 import { EchoAvatar } from "@/components/echo/avatar";
 import { Conversation } from "@/components/echo/conversation";
-import { useChats, useUpdateChatFlags } from "@/lib/echo-queries";
+import { NewGroupDialog } from "@/components/echo/new-group-dialog";
+import { useChats, useRespondGroupInvite, useUpdateChatFlags } from "@/lib/echo-queries";
 import { cn } from "@/lib/utils";
 
 export const Route = createFileRoute("/")({
@@ -38,6 +39,8 @@ function ChatsPage() {
   const { c } = Route.useSearch();
   const chats = useChats();
   const flags = useUpdateChatFlags();
+  const respondInvite = useRespondGroupInvite();
+  const [newGroup, setNewGroup] = useState(false);
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
   const [openId, setOpenId] = useState<string | null>(c ?? null);
@@ -75,7 +78,20 @@ function ChatsPage() {
       title="Chats"
       subtitle={`${all.filter((c) => c.accepted && !c.archived).length} conversations`}
       contentClassName="lg:h-[calc(100vh-69px)] lg:overflow-hidden"
+      actions={
+        <button
+          onClick={() => setNewGroup(true)}
+          className="inline-flex h-9 items-center gap-2 rounded-2xl bg-primary px-3 text-xs font-semibold text-primary-foreground"
+        >
+          <Users className="h-4 w-4" /> New group
+        </button>
+      }
     >
+      <NewGroupDialog
+        open={newGroup}
+        onClose={() => setNewGroup(false)}
+        onCreated={(id) => setOpenId(id)}
+      />
       <div className="grid h-full min-h-0 lg:grid-cols-[minmax(0,380px)_minmax(0,1fr)]">
         <div
           className={cn(
@@ -168,16 +184,29 @@ function ChatsPage() {
                   {!c.accepted ? (
                     <div className="flex gap-2 px-3 pb-3">
                       <button
-                        onClick={() => flags.mutate({ conversationId: c.id, accepted: true })}
+                        onClick={() => {
+                          if (c.kind === "group") {
+                            respondInvite.mutate({ conversationId: c.id, accept: true });
+                          } else {
+                            flags.mutate({ conversationId: c.id, accepted: true });
+                          }
+                        }}
                         className="rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground"
                       >
-                        Accept
+                        {c.kind === "group" ? "Join group" : "Accept"}
                       </button>
                       <button
-                        onClick={() => flags.mutate({ conversationId: c.id, archived: true })}
+                        onClick={() => {
+                          if (c.kind === "group") {
+                            respondInvite.mutate({ conversationId: c.id, accept: false });
+                            if (openId === c.id) setOpenId(null);
+                          } else {
+                            flags.mutate({ conversationId: c.id, archived: true });
+                          }
+                        }}
                         className="rounded-full border border-border px-3 py-1 text-xs font-semibold text-muted-foreground"
                       >
-                        Ignore
+                        {c.kind === "group" ? "Decline" : "Ignore"}
                       </button>
                     </div>
                   ) : null}
