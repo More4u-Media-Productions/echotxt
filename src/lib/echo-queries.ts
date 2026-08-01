@@ -122,7 +122,7 @@ export function useChats() {
       const [{ data: members }, { data: recent }] = await Promise.all([
         supabase
           .from("conversation_members")
-          .select("conversation_id, user_id, profiles(*)")
+          .select("conversation_id, user_id, profiles!conversation_members_user_id_fkey(*)")
           .in("conversation_id", ids),
         supabase
           .from("messages")
