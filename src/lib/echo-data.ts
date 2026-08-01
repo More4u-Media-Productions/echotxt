@@ -59,6 +59,22 @@ export interface EchoMessage {
 }
 
 
+export type GroupRole = "owner" | "admin" | "member";
+
+export interface GroupMember {
+  id: string;
+  role: GroupRole;
+  accepted: boolean;
+  joinedAt: string;
+  invitedBy: string | null;
+  username: string;
+  displayName: string;
+  color: string;
+  avatar: string;
+  avatarUrl: string | null;
+  presence: Presence;
+}
+
 export interface EchoChat {
   id: string;
   kind: "dm" | "group";
@@ -81,7 +97,12 @@ export interface EchoChat {
   lastActivity: string;
   lastMessage: string | null;
   lastMessageAt: string;
+  createdBy: string;
+  myRole: GroupRole;
+  onlyAdminsPost: boolean;
+  onlyAdminsInvite: boolean;
 }
+
 
 export function initialsOf(name: string): string {
   const parts = name.trim().split(/\s+/).filter(Boolean);
