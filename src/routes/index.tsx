@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MessageCircle } from "lucide-react";
 import { AppShell, EmptyState, SearchField } from "@/components/echo/app-shell";
 import { EchoAvatar } from "@/components/echo/avatar";
@@ -25,17 +25,27 @@ export const Route = createFileRoute("/")({
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
+  validateSearch: (search: Record<string, unknown>): { c?: string } => {
+    const c = search['c'];
+    return typeof c === "string" && c ? { c } : {};
+  },
   component: ChatsPage,
 });
 
 type Filter = "all" | "unread" | "requests" | "archived";
 
 function ChatsPage() {
+  const { c } = Route.useSearch();
   const chats = useChats();
   const flags = useUpdateChatFlags();
   const [filter, setFilter] = useState<Filter>("all");
   const [query, setQuery] = useState("");
-  const [openId, setOpenId] = useState<string | null>(null);
+  const [openId, setOpenId] = useState<string | null>(c ?? null);
+
+  useEffect(() => {
+    if (c) setOpenId(c);
+  }, [c]);
+
 
   const all = chats.data ?? [];
   const visible = all
@@ -93,7 +103,18 @@ function ChatsPage() {
 
           {chats.isLoading ? (
             <p className="py-10 text-center text-sm text-muted-foreground">Loading chats…</p>
+          ) : chats.isError ? (
+            <div className="mt-6 rounded-2xl border border-destructive/40 bg-destructive/10 p-4 text-center">
+              <p className="text-sm font-semibold">Couldn't load your chats</p>
+              <button
+                onClick={() => void chats.refetch()}
+                className="mt-2 rounded-full bg-primary px-3 py-1 text-xs font-semibold text-primary-foreground"
+              >
+                Try again
+              </button>
+            </div>
           ) : visible.length === 0 ? (
+
             <EmptyState
               icon={MessageCircle}
               title="No conversations here"
@@ -126,7 +147,13 @@ function ChatsPage() {
                           {c.lastActivity}
                         </span>
                       </span>
+                      {c.kind === "dm" && c.handle ? (
+                        <span className="block truncate text-[11px] text-muted-foreground">
+                          {c.handle}
+                        </span>
+                      ) : null}
                       <span className="mt-0.5 flex items-center gap-2">
+
                         <span className="min-w-0 flex-1 truncate text-xs text-muted-foreground">
                           {c.lastMessage ?? "No messages yet"}
                         </span>

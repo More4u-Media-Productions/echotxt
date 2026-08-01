@@ -428,7 +428,9 @@ function ProfilePreview({
                   <button
                     onClick={() =>
                       startDm.mutate(p.id, {
-                        onSuccess: () => void navigate({ to: "/" }),
+                        onSuccess: (conversationId) =>
+                          void navigate({ to: "/", search: { c: conversationId } }),
+
                         onError,
                       })
                     }

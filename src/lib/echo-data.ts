@@ -34,6 +34,8 @@ export interface Reaction {
   mine: boolean;
 }
 
+export type MessageStatus = "sending" | "sent" | "failed";
+
 export interface EchoMessage {
   id: string;
   authorId: string;
@@ -53,7 +55,9 @@ export interface EchoMessage {
   pinned: boolean;
   reactions: Reaction[];
   readByAll: boolean;
+  status: MessageStatus;
 }
+
 
 export interface EchoChat {
   id: string;

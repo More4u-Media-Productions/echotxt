@@ -1,4 +1,10 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import {
+  useInfiniteQuery,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+} from "@tanstack/react-query";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { toProfile, useUserId, type ProfileRow } from "@/lib/session";
@@ -15,6 +21,10 @@ import {
 
 /* ---------------------------------- realtime --------------------------------- */
 
+/**
+ * One app-wide realtime channel for list-level data (chats, friends, activity).
+ * Per-conversation streams live in `useConversationRealtime`.
+ */
 export function useEchoRealtime() {
   const queryClient = useQueryClient();
   const userId = useUserId();
@@ -24,11 +34,7 @@ export function useEchoRealtime() {
     const channel = supabase
       .channel("echo-stream")
       .on("postgres_changes", { event: "*", schema: "public", table: "messages" }, () => {
-        void queryClient.invalidateQueries({ queryKey: ["messages"] });
         void queryClient.invalidateQueries({ queryKey: ["chats"] });
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "message_reactions" }, () => {
-        void queryClient.invalidateQueries({ queryKey: ["messages"] });
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "conversation_members" }, () => {
         void queryClient.invalidateQueries({ queryKey: ["chats"] });
@@ -46,6 +52,40 @@ export function useEchoRealtime() {
     };
   }, [queryClient, userId]);
 }
+
+/**
+ * Live stream for the conversation that is currently open: new messages, edits,
+ * deletions, reactions and read receipts. Exactly one channel per conversation.
+ */
+export function useConversationRealtime(conversationId: string | null) {
+  const queryClient = useQueryClient();
+  const userId = useUserId();
+
+  useEffect(() => {
+    if (!conversationId || !userId) return;
+    const filter = `conversation_id=eq.${conversationId}`;
+    const refreshMessages = () => {
+      void queryClient.invalidateQueries({ queryKey: ["messages", conversationId] });
+      void queryClient.invalidateQueries({ queryKey: ["chats"] });
+    };
+
+    const channel = supabase
+      .channel(`conversation:${conversationId}`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "messages", filter }, refreshMessages)
+      .on("postgres_changes", { event: "*", schema: "public", table: "message_reactions" }, () =>
+        queryClient.invalidateQueries({ queryKey: ["messages", conversationId] }),
+      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "message_read_receipts" }, () =>
+        queryClient.invalidateQueries({ queryKey: ["receipts", conversationId] }),
+      )
+      .subscribe();
+
+    return () => {
+      void supabase.removeChannel(channel);
+    };
+  }, [conversationId, queryClient, userId]);
+}
+
 
 /* ----------------------------------- chats ----------------------------------- */
 
@@ -142,50 +182,111 @@ function previewOf(kind: string, body: string): string {
 
 /* --------------------------------- messages ---------------------------------- */
 
+const PAGE_SIZE = 30;
+
+const MESSAGE_SELECT = "*, profiles!messages_sender_id_fkey(*), message_reactions(emoji, user_id)";
+
+type MessagePage = EchoMessage[];
+
+function mapMessageRow(row: Record<string, any>, userId: string | null): EchoMessage {
+  const author = toProfile(row['profiles'] as unknown as ProfileRow);
+  const grouped = new Map<string, { emoji: string; count: number; mine: boolean }>();
+  for (const r of (row['message_reactions'] ?? []) as { emoji: string; user_id: string }[]) {
+    const entry = grouped.get(r.emoji) ?? { emoji: r.emoji, count: 0, mine: false };
+    entry.count += 1;
+    if (r.user_id === userId) entry.mine = true;
+    grouped.set(r.emoji, entry);
+  }
+  return {
+    id: row['id'],
+    authorId: row['sender_id'],
+    authorName: author.displayName,
+    authorColor: author.color,
+    authorInitials: author.avatar,
+    authorAvatarUrl: author.avatarUrl,
+    kind: row['kind'] as MessageKind,
+    body: row['body'],
+    metadata: (row['metadata'] ?? {}) as Record<string, unknown>,
+    attachmentUrl: row['attachment_url'] ?? null,
+    attachmentType: row['attachment_type'] ?? null,
+    attachmentName: row['attachment_name'] ?? null,
+    createdAt: row['created_at'],
+    time: clockTime(row['created_at']),
+    edited: !!row['edited_at'],
+    pinned: row['pinned'],
+    reactions: [...grouped.values()],
+    readByAll: false,
+    status: "sent",
+  } satisfies EchoMessage;
+}
+
+/**
+ * Keyset-paginated message history, newest page first. Flattened output is in
+ * chronological order so the UI can render it directly.
+ */
 export function useMessages(conversationId: string | null) {
   const userId = useUserId();
-  return useQuery({
+  const query = useInfiniteQuery({
     queryKey: ["messages", conversationId],
     enabled: !!conversationId && !!userId,
-    queryFn: async (): Promise<EchoMessage[]> => {
-      const { data, error } = await supabase
+    initialPageParam: null as string | null,
+    queryFn: async ({ pageParam }): Promise<MessagePage> => {
+      let request = supabase
         .from("messages")
-        .select("*, profiles!messages_sender_id_fkey(*), message_reactions(emoji, user_id)")
+        .select(MESSAGE_SELECT)
         .eq("conversation_id", conversationId!)
-        .order("created_at", { ascending: true })
-        .limit(300);
+        .order("created_at", { ascending: false })
+        .order("id", { ascending: false })
+        .limit(PAGE_SIZE);
+      if (pageParam) request = request.lt("created_at", pageParam);
+      const { data, error } = await request;
       if (error) throw error;
+      return (data ?? []).map((row) => mapMessageRow(row as Record<string, any>, userId));
+    },
+    getNextPageParam: (last) =>
+      last.length < PAGE_SIZE ? undefined : (last[last.length - 1]?.createdAt ?? undefined),
+  });
 
-      return (data ?? []).map((row) => {
-        const author = toProfile(row.profiles as unknown as ProfileRow);
-        const grouped = new Map<string, { emoji: string; count: number; mine: boolean }>();
-        for (const r of row.message_reactions ?? []) {
-          const entry = grouped.get(r.emoji) ?? { emoji: r.emoji, count: 0, mine: false };
-          entry.count += 1;
-          if (r.user_id === userId) entry.mine = true;
-          grouped.set(r.emoji, entry);
-        }
-        return {
-          id: row.id,
-          authorId: row.sender_id,
-          authorName: author.displayName,
-          authorColor: author.color,
-          authorInitials: author.avatar,
-          authorAvatarUrl: author.avatarUrl,
-          kind: row.kind as MessageKind,
-          body: row.body,
-          metadata: (row.metadata ?? {}) as Record<string, unknown>,
-          attachmentUrl: row.attachment_url ?? null,
-          attachmentType: row.attachment_type ?? null,
-          attachmentName: row.attachment_name ?? null,
-          createdAt: row.created_at,
-          time: clockTime(row.created_at),
-          edited: !!row.edited_at,
-          pinned: row.pinned,
-          reactions: [...grouped.values()],
-          readByAll: false,
-        } satisfies EchoMessage;
-      });
+  const flat: EchoMessage[] = [];
+  const seen = new Set<string>();
+  for (const page of [...(query.data?.pages ?? [])].reverse()) {
+    for (const message of [...page].reverse()) {
+      if (seen.has(message.id)) continue;
+      seen.add(message.id);
+      flat.push(message);
+    }
+  }
+  flat.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+
+  return {
+    data: flat,
+    isLoading: query.isLoading,
+    isError: query.isError,
+    error: query.error,
+    refetch: query.refetch,
+    hasMore: query.hasNextPage,
+    loadMore: query.fetchNextPage,
+    isLoadingMore: query.isFetchingNextPage,
+  };
+}
+
+/** Read receipts for every message in a conversation, keyed by message id. */
+export function useReadReceipts(conversationId: string | null) {
+  const userId = useUserId();
+  return useQuery({
+    queryKey: ["receipts", conversationId],
+    enabled: !!conversationId && !!userId,
+    queryFn: async (): Promise<Record<string, string[]>> => {
+      const { data, error } = await supabase
+        .from("message_read_receipts")
+        .select("message_id, user_id, messages!inner(conversation_id)")
+        .eq("messages.conversation_id", conversationId!);
+      if (error) throw error;
+      const map: Record<string, string[]> = {};
+      for (const row of data ?? []) {
+        (map[row.message_id] ??= []).push(row.user_id);
+      }
+      return map;
     },
   });
 }
@@ -199,21 +300,102 @@ export function useSendMessage() {
       body: string;
       kind?: MessageKind;
       metadata?: Record<string, unknown>;
+      tempId?: string;
     }) => {
-      const { error } = await supabase.from("messages").insert({
-        conversation_id: input.conversationId,
-        sender_id: userId!,
-        body: input.body,
-        kind: input.kind ?? "text",
-        metadata: (input.metadata ?? {}) as never,
-      });
+      const { data, error } = await supabase
+        .from("messages")
+        .insert({
+          conversation_id: input.conversationId,
+          sender_id: userId!,
+          body: input.body,
+          kind: input.kind ?? "text",
+          metadata: (input.metadata ?? {}) as never,
+        })
+        .select(MESSAGE_SELECT)
+        .single();
       if (error) throw error;
+      return mapMessageRow(data as Record<string, any>, userId);
     },
-    onSuccess: (_d, vars) => {
-      void queryClient.invalidateQueries({ queryKey: ["messages", vars.conversationId] });
+    onMutate: async (input) => {
+      const tempId = input.tempId ?? `temp-${crypto.randomUUID()}`;
+      input.tempId = tempId;
+      const key = ["messages", input.conversationId];
+      await queryClient.cancelQueries({ queryKey: key });
+      const profile = queryClient.getQueryData<EchoProfile | null>(["profile", userId]);
+      const now = new Date().toISOString();
+      const optimistic: EchoMessage = {
+        id: tempId,
+        authorId: userId!,
+        authorName: profile?.displayName ?? "You",
+        authorColor: profile?.color ?? "oklch(0.63 0.13 195)",
+        authorInitials: profile?.avatar ?? "?",
+        authorAvatarUrl: profile?.avatarUrl ?? null,
+        kind: input.kind ?? "text",
+        body: input.body,
+        metadata: input.metadata ?? {},
+        attachmentUrl: null,
+        attachmentType: null,
+        attachmentName: null,
+        createdAt: now,
+        time: clockTime(now),
+        edited: false,
+        pinned: false,
+        reactions: [],
+        readByAll: false,
+        status: "sending",
+      };
+      queryClient.setQueryData<InfiniteData<MessagePage, string | null>>(key, (old) => {
+        if (!old) return old;
+        const pages = old.pages.map((p) => [...p]);
+        pages[0] = [optimistic, ...(pages[0] ?? [])];
+        return { ...old, pages };
+      });
+      return { tempId };
+    },
+    onError: (_err, input, context) => {
+      const tempId = context?.tempId ?? input.tempId;
+      if (!tempId) return;
+      queryClient.setQueryData<InfiniteData<MessagePage, string | null>>(
+        ["messages", input.conversationId],
+        (old) =>
+          old
+            ? {
+                ...old,
+                pages: old.pages.map((page) =>
+                  page.map((m) => (m.id === tempId ? { ...m, status: "failed" as const } : m)),
+                ),
+              }
+            : old,
+      );
+    },
+    onSuccess: (saved, input, context) => {
+      const tempId = context?.tempId ?? input.tempId;
+      queryClient.setQueryData<InfiniteData<MessagePage, string | null>>(
+        ["messages", input.conversationId],
+        (old) => {
+          if (!old) return old;
+          const pages = old.pages.map((page) =>
+            page.filter((m) => m.id !== tempId && m.id !== saved.id),
+          );
+          pages[0] = [saved, ...(pages[0] ?? [])];
+          return { ...old, pages };
+        },
+      );
       void queryClient.invalidateQueries({ queryKey: ["chats"] });
     },
   });
+}
+
+/** Removes a message that failed to send from the local cache. */
+export function useDiscardFailedMessage() {
+  const queryClient = useQueryClient();
+  return (conversationId: string, messageId: string) => {
+    queryClient.setQueryData<InfiniteData<MessagePage, string | null>>(
+      ["messages", conversationId],
+      (old) =>
+        old ? { ...old, pages: old.pages.map((p) => p.filter((m) => m.id !== messageId)) } : old,
+    );
+  };
 }
 
 export function useToggleReaction() {
@@ -240,6 +422,10 @@ export function useToggleReaction() {
   });
 }
 
+/**
+ * Marks a conversation read: moves the member cursor and writes a read receipt
+ * for every incoming message that doesn't have one yet.
+ */
 export function useMarkRead() {
   const userId = useUserId();
   const queryClient = useQueryClient();
@@ -251,10 +437,41 @@ export function useMarkRead() {
         .eq("conversation_id", conversationId)
         .eq("user_id", userId!);
       if (error) throw error;
+
+      const { data: incoming, error: readError } = await supabase
+        .from("messages")
+        .select("id")
+        .eq("conversation_id", conversationId)
+        .neq("sender_id", userId!)
+        .order("created_at", { ascending: false })
+        .limit(200);
+      if (readError) throw readError;
+      if (!incoming?.length) return;
+
+      const { error: receiptError } = await supabase.from("message_read_receipts").upsert(
+        incoming.map((m) => ({ message_id: m.id, user_id: userId! })),
+        { onConflict: "message_id,user_id", ignoreDuplicates: true },
+      );
+      if (receiptError) throw receiptError;
+
+      // Opening the chat clears its message notifications too.
+      await supabase
+        .from("notifications")
+        .update({ read: true })
+        .eq("user_id", userId!)
+        .eq("conversation_id", conversationId)
+        .eq("type", "message")
+        .eq("read", false);
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["chats"] }),
+    onSuccess: (_d, conversationId) => {
+      void queryClient.invalidateQueries({ queryKey: ["chats"] });
+      void queryClient.invalidateQueries({ queryKey: ["receipts", conversationId] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+
   });
 }
+
 
 export function useUpdateChatFlags() {
   const userId = useUserId();
@@ -298,52 +515,19 @@ export function useLeaveChat() {
 /* ------------------------------ create conversations ------------------------- */
 
 export function useStartDm() {
-  const userId = useUserId();
   const queryClient = useQueryClient();
   return useMutation({
+    // Database-side start-or-reuse: a unique DM key makes duplicates impossible.
     mutationFn: async (otherUserId: string): Promise<string> => {
-      const { data: mine } = await supabase
-        .from("conversation_members")
-        .select("conversation_id, conversations!inner(kind)")
-        .eq("user_id", userId!)
-        .eq("conversations.kind", "dm");
-      const myIds = (mine ?? []).map((r) => r.conversation_id);
-      if (myIds.length) {
-        const { data: shared } = await supabase
-          .from("conversation_members")
-          .select("conversation_id")
-          .eq("user_id", otherUserId)
-          .in("conversation_id", myIds);
-        const existing = shared?.[0]?.conversation_id;
-        if (existing) return existing;
-      }
-
-      const { data: convo, error } = await supabase
-        .from("conversations")
-        .insert({ kind: "dm", created_by: userId! })
-        .select("id")
-        .single();
+      const { data, error } = await supabase.rpc("start_dm", { _other: otherUserId });
       if (error) throw error;
-
-      const { data: friendship } = await supabase
-        .from("friendships")
-        .select("status")
-        .or(
-          `and(requester_id.eq.${userId},addressee_id.eq.${otherUserId}),and(requester_id.eq.${otherUserId},addressee_id.eq.${userId})`,
-        )
-        .maybeSingle();
-      const areFriends = friendship?.status === "accepted";
-
-      const { error: memberError } = await supabase.from("conversation_members").insert([
-        { conversation_id: convo.id, user_id: userId!, role: "owner", accepted: true },
-        { conversation_id: convo.id, user_id: otherUserId, accepted: areFriends },
-      ]);
-      if (memberError) throw memberError;
-      return convo.id;
+      if (!data) throw new Error("Could not open that conversation.");
+      return data;
     },
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["chats"] }),
   });
 }
+
 
 export function useCreateGroup() {
   const userId = useUserId();

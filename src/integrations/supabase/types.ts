@@ -124,6 +124,7 @@ export type Database = {
           created_at: string
           created_by: string
           description: string | null
+          dm_key: string | null
           id: string
           kind: Database["public"]["Enums"]["conversation_kind"]
           last_message_at: string
@@ -136,6 +137,7 @@ export type Database = {
           created_at?: string
           created_by: string
           description?: string | null
+          dm_key?: string | null
           id?: string
           kind?: Database["public"]["Enums"]["conversation_kind"]
           last_message_at?: string
@@ -148,6 +150,7 @@ export type Database = {
           created_at?: string
           created_by?: string
           description?: string | null
+          dm_key?: string | null
           id?: string
           kind?: Database["public"]["Enums"]["conversation_kind"]
           last_message_at?: string
@@ -516,6 +519,7 @@ export type Database = {
           username: string
         }[]
       }
+      start_dm: { Args: { _other: string }; Returns: string }
     }
     Enums: {
       call_media: "voice" | "video"
