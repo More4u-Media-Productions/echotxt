@@ -318,6 +318,11 @@ export function Conversation({
         <div ref={endRef} />
       </div>
 
+      {postingLocked ? (
+        <div className="border-t border-border bg-surface/60 px-4 py-4 text-center text-xs text-muted-foreground">
+          Only admins can send messages in this group.
+        </div>
+      ) : (
       <form onSubmit={submit} className="border-t border-border bg-surface/60 px-4 py-3">
         {typing.length ? (
           <p className="mb-1 text-[11px] text-muted-foreground">
@@ -364,6 +369,16 @@ export function Conversation({
           </button>
         </div>
       </form>
+      )}
+
+      {isGroup ? (
+        <GroupPanel
+          chat={chat}
+          open={panelOpen}
+          onClose={() => setPanelOpen(false)}
+          onLeft={onBack}
+        />
+      ) : null}
     </section>
   );
 }
