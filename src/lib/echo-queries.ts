@@ -15,9 +15,12 @@ import {
   type EchoChat,
   type EchoMessage,
   type EchoProfile,
+  type GroupMember,
+  type GroupRole,
   type MessageKind,
   type Presence,
 } from "@/lib/echo-data";
+
 
 /* ---------------------------------- realtime --------------------------------- */
 
