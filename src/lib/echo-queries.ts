@@ -605,7 +605,7 @@ export function useCreateGroup() {
     }): Promise<string> => {
       const { data, error } = await supabase.rpc("create_group", {
         _title: input.title,
-        _description: input.description ?? null,
+        ...(input.description ? { _description: input.description } : {}),
         _member_ids: input.memberIds,
       });
       if (error) throw error;
@@ -672,10 +672,12 @@ export function useUpdateGroup() {
     }) => {
       const { error } = await supabase.rpc("update_group", {
         _cid: input.conversationId,
-        _title: input.title ?? null,
-        _description: input.description ?? null,
-        _only_admins_post: input.onlyAdminsPost ?? null,
-        _only_admins_invite: input.onlyAdminsInvite ?? null,
+        ...(input.title !== undefined ? { _title: input.title } : {}),
+        ...(input.description !== undefined ? { _description: input.description ?? "" } : {}),
+        ...(input.onlyAdminsPost !== undefined ? { _only_admins_post: input.onlyAdminsPost } : {}),
+        ...(input.onlyAdminsInvite !== undefined
+          ? { _only_admins_invite: input.onlyAdminsInvite }
+          : {}),
       });
       if (error) throw error;
     },
