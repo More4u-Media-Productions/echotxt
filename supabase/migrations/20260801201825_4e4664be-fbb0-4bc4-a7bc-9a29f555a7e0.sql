@@ -1,0 +1,11 @@
+REVOKE EXECUTE ON FUNCTION public.create_group(text, text, uuid[], text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.add_group_members(uuid, uuid[]) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.respond_group_invite(uuid, boolean) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.remove_group_member(uuid, uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.set_group_role(uuid, uuid, text) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.update_group(uuid, text, text, text, boolean, boolean) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.leave_group(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.group_members(uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.conversation_role(uuid, uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.is_conversation_admin(uuid, uuid) FROM anon;
+REVOKE EXECUTE ON FUNCTION public.post_system_message(uuid, uuid, text) FROM anon, authenticated;
