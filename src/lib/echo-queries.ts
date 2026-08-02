@@ -206,19 +206,40 @@ function previewOf(kind: string, body: string): string {
 
 const PAGE_SIZE = 30;
 
-const MESSAGE_SELECT = "*, profiles!messages_sender_id_fkey(*), message_reactions(emoji, user_id)";
+const MESSAGE_SELECT =
+  "*, profiles!messages_sender_id_fkey(*), message_reactions(emoji, user_id), " +
+  "message_bookmarks(user_id), message_hides(user_id), " +
+  "reply:reply_to(id, body, kind, deleted_at, sender_id, profiles!messages_sender_id_fkey(display_name, username))";
 
 type MessagePage = EchoMessage[];
 
+function replyPreviewOf(raw: unknown): ReplyPreview | null {
+  const row = (Array.isArray(raw) ? raw[0] : raw) as Record<string, any> | null | undefined;
+  if (!row) return null;
+  const author = (Array.isArray(row['profiles']) ? row['profiles'][0] : row['profiles']) as
+    | { display_name?: string; username?: string }
+    | null;
+  const deleted = !!row['deleted_at'];
+  return {
+    id: row['id'],
+    authorName: author?.display_name || author?.username || "Someone",
+    body: deleted ? "Message deleted" : previewOf(row['kind'], row['body'] ?? ""),
+    kind: (row['kind'] ?? "text") as MessageKind,
+    deleted,
+  };
+}
+
 function mapMessageRow(row: Record<string, any>, userId: string | null): EchoMessage {
   const author = toProfile(row['profiles'] as unknown as ProfileRow);
-  const grouped = new Map<string, { emoji: string; count: number; mine: boolean }>();
+  const grouped = new Map<string, Reaction>();
   for (const r of (row['message_reactions'] ?? []) as { emoji: string; user_id: string }[]) {
-    const entry = grouped.get(r.emoji) ?? { emoji: r.emoji, count: 0, mine: false };
+    const entry = grouped.get(r.emoji) ?? { emoji: r.emoji, count: 0, mine: false, userIds: [] };
     entry.count += 1;
+    entry.userIds.push(r.user_id);
     if (r.user_id === userId) entry.mine = true;
     grouped.set(r.emoji, entry);
   }
+  const deleted = !!row['deleted_at'];
   return {
     id: row['id'],
     authorId: row['sender_id'],
@@ -227,22 +248,34 @@ function mapMessageRow(row: Record<string, any>, userId: string | null): EchoMes
     authorInitials: author.avatar,
     authorAvatarUrl: author.avatarUrl,
     kind: row['kind'] as MessageKind,
-    body: row['body'],
+    body: deleted ? "" : row['body'],
     metadata: (row['metadata'] ?? {}) as Record<string, unknown>,
-    attachmentUrl: row['attachment_url'] ?? null,
-    attachmentType: row['attachment_type'] ?? null,
-    attachmentName: row['attachment_name'] ?? null,
-    attachmentSize: row['attachment_size'] ?? null,
+    attachmentUrl: deleted ? null : (row['attachment_url'] ?? null),
+    attachmentType: deleted ? null : (row['attachment_type'] ?? null),
+    attachmentName: deleted ? null : (row['attachment_name'] ?? null),
+    attachmentSize: deleted ? null : (row['attachment_size'] ?? null),
 
     createdAt: row['created_at'],
     time: clockTime(row['created_at']),
-    edited: !!row['edited_at'],
-    pinned: row['pinned'],
+    edited: !deleted && !!row['edited_at'],
+    editedAt: row['edited_at'] ?? null,
+    pinned: !deleted && row['pinned'],
+    bookmarked: ((row['message_bookmarks'] ?? []) as unknown[]).length > 0,
+    deleted,
+    deletedByMe: row['deleted_by'] === userId,
+    replyToId: row['reply_to'] ?? null,
+    replyTo: deleted ? null : replyPreviewOf(row['reply']),
     reactions: [...grouped.values()],
     readByAll: false,
     status: "sent",
   } satisfies EchoMessage;
 }
+
+/** True when the signed-in user chose "delete for me" on this row. */
+function isHidden(row: Record<string, any>): boolean {
+  return ((row['message_hides'] ?? []) as unknown[]).length > 0;
+}
+
 
 /**
  * Keyset-paginated message history, newest page first. Flattened output is in
