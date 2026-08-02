@@ -13,6 +13,8 @@ export type MessageKind =
   | "event"
   | "system";
 
+export type Visibility = "everyone" | "friends" | "nobody";
+
 export interface EchoProfile {
   id: string;
   username: string;
@@ -26,15 +28,29 @@ export interface EchoProfile {
   presence: Presence;
   lastSeen: string;
   joined: string;
+  statusText: string;
+  statusEmoji: string | null;
+  appearOffline: boolean;
+  presenceVisibility: Visibility;
+  lastSeenVisibility: Visibility;
 }
 
 export interface Reaction {
   emoji: string;
   count: number;
   mine: boolean;
+  userIds: string[];
 }
 
 export type MessageStatus = "sending" | "sent" | "failed";
+
+export interface ReplyPreview {
+  id: string;
+  authorName: string;
+  body: string;
+  kind: MessageKind;
+  deleted: boolean;
+}
 
 export interface EchoMessage {
   id: string;
@@ -54,11 +70,33 @@ export interface EchoMessage {
   createdAt: string;
   time: string;
   edited: boolean;
+  editedAt: string | null;
   pinned: boolean;
+  bookmarked: boolean;
+  deleted: boolean;
+  deletedByMe: boolean;
+  replyToId: string | null;
+  replyTo: ReplyPreview | null;
   reactions: Reaction[];
   readByAll: boolean;
   status: MessageStatus;
 }
+
+/** Voice-message payload stored on `messages.metadata`. */
+export interface VoiceMeta {
+  durationSeconds: number;
+  peaks: number[];
+}
+
+export function voiceMeta(metadata: Record<string, unknown>): VoiceMeta {
+  const duration = Number(metadata['durationSeconds'] ?? metadata['duration'] ?? 0);
+  const rawPeaks = metadata['peaks'];
+  const peaks = Array.isArray(rawPeaks)
+    ? rawPeaks.map((p) => Math.min(1, Math.max(0, Number(p) || 0)))
+    : [];
+  return { durationSeconds: Number.isFinite(duration) ? duration : 0, peaks };
+}
+
 
 
 export type GroupRole = "owner" | "admin" | "member";
