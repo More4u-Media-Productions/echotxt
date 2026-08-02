@@ -301,7 +301,9 @@ export function useMessages(conversationId: string | null) {
       if (pageParam) request = request.lt("created_at", pageParam);
       const { data, error } = await request;
       if (error) throw error;
-      return (data ?? []).map((row) => mapMessageRow(row as Record<string, any>, userId));
+      return (data ?? [])
+        .filter((row) => !isHidden(row as Record<string, any>))
+        .map((row) => mapMessageRow(row as Record<string, any>, userId));
     },
     getNextPageParam: (last) =>
       last.length < PAGE_SIZE ? undefined : (last[last.length - 1]?.createdAt ?? undefined),
