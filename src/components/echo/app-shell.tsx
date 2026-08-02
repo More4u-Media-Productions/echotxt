@@ -51,9 +51,16 @@ export function AppShell({
   const notifications = useNotifications();
   useEchoRealtime();
 
+  const sessionUserId = session?.user.id ?? null;
+  useEffect(() => {
+    if (sessionUserId) linkPushUser(sessionUserId);
+    else unlinkPushUser();
+  }, [sessionUserId]);
+
   useEffect(() => {
     if (!loading && !session && !error) void navigate({ to: "/auth", replace: true });
   }, [loading, session, error, navigate]);
+
 
   if (loading && !error) {
     return (
