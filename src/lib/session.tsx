@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Session } from "@supabase/supabase-js";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { initialsOf, type EchoProfile, type Presence } from "@/lib/echo-data";
+import { initialsOf, type EchoProfile, type Presence, type Visibility } from "@/lib/echo-data";
 
 const SESSION_LOAD_TIMEOUT_MS = 10_000;
 
