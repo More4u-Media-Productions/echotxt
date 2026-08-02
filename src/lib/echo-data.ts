@@ -49,6 +49,8 @@ export interface EchoMessage {
   attachmentUrl: string | null;
   attachmentType: string | null;
   attachmentName: string | null;
+  attachmentSize: number | null;
+
   createdAt: string;
   time: string;
   edited: boolean;

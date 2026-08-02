@@ -230,6 +230,8 @@ function mapMessageRow(row: Record<string, any>, userId: string | null): EchoMes
     attachmentUrl: row['attachment_url'] ?? null,
     attachmentType: row['attachment_type'] ?? null,
     attachmentName: row['attachment_name'] ?? null,
+    attachmentSize: row['attachment_size'] ?? null,
+
     createdAt: row['created_at'],
     time: clockTime(row['created_at']),
     edited: !!row['edited_at'],
