@@ -7,6 +7,8 @@ import {
 } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { notifyNewMessage } from "@/lib/push.functions";
+
 import { toProfile, useUserId, type ProfileRow } from "@/lib/session";
 import {
   clockTime,
