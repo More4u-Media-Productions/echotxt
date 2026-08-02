@@ -719,7 +719,7 @@ export function useBookmarks() {
         .limit(100);
       if (error) throw error;
       return (data ?? [])
-        .map((row) => {
+        .map((row): BookmarkedMessage | null => {
           const message = (row as Record<string, any>)['messages'] as Record<string, any>;
           if (!message || message['deleted_at'] || isHidden(message)) return null;
           const convo = message['conversations'] as Record<string, any>;
@@ -729,7 +729,7 @@ export function useBookmarks() {
             conversationId: convo?.['id'] ?? message['conversation_id'],
             conversationName:
               convo?.['kind'] === "group" ? (convo['title'] ?? "Group") : "Direct message",
-          } satisfies BookmarkedMessage;
+          };
         })
         .filter((m): m is BookmarkedMessage => m !== null);
     },
