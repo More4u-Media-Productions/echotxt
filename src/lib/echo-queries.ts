@@ -431,6 +431,28 @@ export function useDiscardFailedMessage() {
   };
 }
 
+/** Deletes one of my messages; the DB trigger removes any attached file. */
+export function useDeleteMessage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { conversationId: string; messageId: string }) => {
+      const { error } = await supabase.from("messages").delete().eq("id", input.messageId);
+      if (error) throw error;
+    },
+    onSuccess: (_r, input) => {
+      queryClient.setQueryData<InfiniteData<MessagePage, string | null>>(
+        ["messages", input.conversationId],
+        (old) =>
+          old
+            ? { ...old, pages: old.pages.map((p) => p.filter((m) => m.id !== input.messageId)) }
+            : old,
+      );
+      void queryClient.invalidateQueries({ queryKey: ["chats"] });
+    },
+  });
+}
+
+
 export function useToggleReaction() {
   const userId = useUserId();
   const queryClient = useQueryClient();
