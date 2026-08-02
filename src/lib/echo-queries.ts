@@ -366,6 +366,8 @@ export function useSendMessage() {
       attachmentType?: string | null;
       attachmentName?: string | null;
       attachmentSize?: number | null;
+      replyToId?: string | null;
+      replyTo?: ReplyPreview | null;
       tempId?: string;
     }) => {
       const { data, error } = await supabase
@@ -380,6 +382,7 @@ export function useSendMessage() {
           attachment_type: input.attachmentType ?? null,
           attachment_name: input.attachmentName ?? null,
           attachment_size: input.attachmentSize ?? null,
+          reply_to: input.replyToId ?? null,
         })
         .select(MESSAGE_SELECT)
         .single();
@@ -412,11 +415,18 @@ export function useSendMessage() {
         createdAt: now,
         time: clockTime(now),
         edited: false,
+        editedAt: null,
         pinned: false,
+        bookmarked: false,
+        deleted: false,
+        deletedByMe: false,
+        replyToId: input.replyToId ?? null,
+        replyTo: input.replyTo ?? null,
         reactions: [],
         readByAll: false,
         status: "sending",
       };
+
       queryClient.setQueryData<InfiniteData<MessagePage, string | null>>(key, (old) => {
         if (!old) return old;
         const pages = old.pages.map((p) => [...p]);
