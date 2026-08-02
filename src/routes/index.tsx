@@ -26,10 +26,15 @@ export const Route = createFileRoute("/")({
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
-  validateSearch: (search: Record<string, unknown>): { c?: string } => {
+  validateSearch: (search: Record<string, unknown>): { c?: string; m?: string } => {
     const c = search['c'];
-    return typeof c === "string" && c ? { c } : {};
+    const m = search['m'];
+    return {
+      ...(typeof c === "string" && c ? { c } : {}),
+      ...(typeof m === "string" && m ? { m } : {}),
+    };
   },
+
   component: ChatsPage,
 });
 
