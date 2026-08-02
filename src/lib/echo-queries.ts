@@ -492,13 +492,89 @@ export function useDiscardFailedMessage() {
   };
 }
 
-/** Deletes one of my messages; the DB trigger removes any attached file. */
+function patchMessage(
+  queryClient: ReturnType<typeof useQueryClient>,
+  conversationId: string,
+  messageId: string,
+  patch: (message: EchoMessage) => EchoMessage,
+) {
+  queryClient.setQueryData<InfiniteData<MessagePage, string | null>>(
+    ["messages", conversationId],
+    (old) =>
+      old
+        ? {
+            ...old,
+            pages: old.pages.map((page) =>
+              page.map((m) => (m.id === messageId ? patch(m) : m)),
+            ),
+          }
+        : old,
+  );
+}
+
+/**
+ * "Delete for everyone": leaves a tombstone so the row stays as a reply target
+ * and every member sees the same placeholder. Any attachment is removed too.
+ */
 export function useDeleteMessage() {
+  const userId = useUserId();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      conversationId: string;
+      messageId: string;
+      attachmentUrl?: string | null;
+    }) => {
+      const { error } = await supabase
+        .from("messages")
+        .update({
+          deleted_at: new Date().toISOString(),
+          deleted_by: userId!,
+          body: "",
+          attachment_url: null,
+          attachment_type: null,
+          attachment_name: null,
+          attachment_size: null,
+          pinned: false,
+          metadata: {} as never,
+        })
+        .eq("id", input.messageId);
+      if (error) throw error;
+      if (input.attachmentUrl) {
+        await supabase.storage.from("chat-media").remove([input.attachmentUrl]);
+      }
+      await supabase.from("message_reactions").delete().eq("message_id", input.messageId);
+    },
+    onSuccess: (_r, input) => {
+      patchMessage(queryClient, input.conversationId, input.messageId, (m) => ({
+        ...m,
+        deleted: true,
+        deletedByMe: true,
+        body: "",
+        attachmentUrl: null,
+        attachmentType: null,
+        attachmentName: null,
+        attachmentSize: null,
+        pinned: false,
+        reactions: [],
+        replyTo: null,
+      }));
+      void queryClient.invalidateQueries({ queryKey: ["messages", input.conversationId] });
+      void queryClient.invalidateQueries({ queryKey: ["chats"] });
+    },
+  });
+}
+
+/** "Delete for me": hides the message for the signed-in user only. */
+export function useHideMessage() {
+  const userId = useUserId();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: { conversationId: string; messageId: string }) => {
-      const { error } = await supabase.from("messages").delete().eq("id", input.messageId);
-      if (error) throw error;
+      const { error } = await supabase
+        .from("message_hides")
+        .insert({ message_id: input.messageId, user_id: userId! });
+      if (error && error.code !== "23505") throw error;
     },
     onSuccess: (_r, input) => {
       queryClient.setQueryData<InfiniteData<MessagePage, string | null>>(
@@ -508,10 +584,176 @@ export function useDeleteMessage() {
             ? { ...old, pages: old.pages.map((p) => p.filter((m) => m.id !== input.messageId)) }
             : old,
       );
+      void queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
+    },
+  });
+}
+
+/** Edits the text of one of my own messages. */
+export function useEditMessage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { conversationId: string; messageId: string; body: string }) => {
+      const body = input.body.trim();
+      if (!body) throw new Error("Message can't be empty.");
+      const { error } = await supabase
+        .from("messages")
+        .update({ body, edited_at: new Date().toISOString() })
+        .eq("id", input.messageId);
+      if (error) throw error;
+      return body;
+    },
+    onSuccess: (body, input) => {
+      patchMessage(queryClient, input.conversationId, input.messageId, (m) => ({
+        ...m,
+        body,
+        edited: true,
+        editedAt: new Date().toISOString(),
+      }));
       void queryClient.invalidateQueries({ queryKey: ["chats"] });
     },
   });
 }
+
+/** Pins or unpins a message for the whole conversation. */
+export function useTogglePin() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      conversationId: string;
+      messageId: string;
+      pinned: boolean;
+    }) => {
+      const { error } = await supabase.rpc("set_message_pinned", {
+        _mid: input.messageId,
+        _pinned: input.pinned,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_r, input) => {
+      patchMessage(queryClient, input.conversationId, input.messageId, (m) => ({
+        ...m,
+        pinned: input.pinned,
+      }));
+      void queryClient.invalidateQueries({ queryKey: ["pinned", input.conversationId] });
+    },
+  });
+}
+
+/** Private per-user bookmark ("saved message"). */
+export function useToggleBookmark() {
+  const userId = useUserId();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      conversationId: string;
+      messageId: string;
+      bookmarked: boolean;
+    }) => {
+      if (input.bookmarked) {
+        const { error } = await supabase
+          .from("message_bookmarks")
+          .delete()
+          .eq("message_id", input.messageId)
+          .eq("user_id", userId!);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("message_bookmarks")
+          .insert({ message_id: input.messageId, user_id: userId! });
+        if (error && error.code !== "23505") throw error;
+      }
+    },
+    onSuccess: (_r, input) => {
+      patchMessage(queryClient, input.conversationId, input.messageId, (m) => ({
+        ...m,
+        bookmarked: !input.bookmarked,
+      }));
+      void queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
+    },
+  });
+}
+
+/** Pinned messages for the conversation header strip. */
+export function usePinnedMessages(conversationId: string | null) {
+  const userId = useUserId();
+  return useQuery({
+    queryKey: ["pinned", conversationId],
+    enabled: !!conversationId && !!userId,
+    queryFn: async (): Promise<EchoMessage[]> => {
+      const { data, error } = await supabase
+        .from("messages")
+        .select(MESSAGE_SELECT)
+        .eq("conversation_id", conversationId!)
+        .eq("pinned", true)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return (data ?? [])
+        .filter((row) => !isHidden(row as Record<string, any>))
+        .map((row) => mapMessageRow(row as Record<string, any>, userId));
+    },
+  });
+}
+
+export interface BookmarkedMessage extends EchoMessage {
+  conversationId: string;
+  conversationName: string;
+}
+
+/** Every message the signed-in user saved, newest first. */
+export function useBookmarks() {
+  const userId = useUserId();
+  return useQuery({
+    queryKey: ["bookmarks", userId],
+    enabled: !!userId,
+    queryFn: async (): Promise<BookmarkedMessage[]> => {
+      const { data, error } = await supabase
+        .from("message_bookmarks")
+        .select(
+          `created_at, messages!inner(${MESSAGE_SELECT}, conversations!inner(id, kind, title))`,
+        )
+        .eq("user_id", userId!)
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      return (data ?? [])
+        .map((row) => {
+          const message = (row as Record<string, any>)['messages'] as Record<string, any>;
+          if (!message || message['deleted_at'] || isHidden(message)) return null;
+          const convo = message['conversations'] as Record<string, any>;
+          return {
+            ...mapMessageRow(message, userId),
+            bookmarked: true,
+            conversationId: convo?.['id'] ?? message['conversation_id'],
+            conversationName:
+              convo?.['kind'] === "group" ? (convo['title'] ?? "Group") : "Direct message",
+          } satisfies BookmarkedMessage;
+        })
+        .filter((m): m is BookmarkedMessage => m !== null);
+    },
+  });
+}
+
+/** Loads a single message plus its neighbours so search results can jump to it. */
+export function useMessageContext(conversationId: string | null, messageId: string | null) {
+  const userId = useUserId();
+  return useQuery({
+    queryKey: ["message-context", conversationId, messageId],
+    enabled: !!conversationId && !!messageId && !!userId,
+    queryFn: async (): Promise<EchoMessage | null> => {
+      const { data, error } = await supabase
+        .from("messages")
+        .select(MESSAGE_SELECT)
+        .eq("id", messageId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data ? mapMessageRow(data as Record<string, any>, userId) : null;
+    },
+  });
+}
+
 
 
 export function useToggleReaction() {
