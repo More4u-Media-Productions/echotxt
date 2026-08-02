@@ -243,6 +243,72 @@ export type Database = {
           },
         ]
       }
+      message_bookmarks: {
+        Row: {
+          created_at: string
+          message_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          message_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          message_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_bookmarks_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_bookmarks_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      message_hides: {
+        Row: {
+          created_at: string
+          message_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          message_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          message_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "message_hides_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "messages"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "message_hides_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       message_reactions: {
         Row: {
           created_at: string
@@ -317,6 +383,8 @@ export type Database = {
           body: string
           conversation_id: string
           created_at: string
+          deleted_at: string | null
+          deleted_by: string | null
           edited_at: string | null
           id: string
           kind: Database["public"]["Enums"]["message_kind"]
@@ -333,6 +401,8 @@ export type Database = {
           body?: string
           conversation_id: string
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           edited_at?: string | null
           id?: string
           kind?: Database["public"]["Enums"]["message_kind"]
@@ -349,6 +419,8 @@ export type Database = {
           body?: string
           conversation_id?: string
           created_at?: string
+          deleted_at?: string | null
+          deleted_by?: string | null
           edited_at?: string | null
           id?: string
           kind?: Database["public"]["Enums"]["message_kind"]
@@ -366,6 +438,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "messages_deleted_by_fkey"
+            columns: ["deleted_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "messages_reply_to_fkey"
             columns: ["reply_to"]
             isOneToOne: false
@@ -376,6 +455,59 @@ export type Database = {
             foreignKeyName: "messages_sender_id_fkey"
             columns: ["sender_id"]
             isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      notification_prefs: {
+        Row: {
+          created_at: string
+          friends_enabled: boolean
+          groups_enabled: boolean
+          mentions_enabled: boolean
+          messages_enabled: boolean
+          push_enabled: boolean
+          quiet_end: number
+          quiet_hours_enabled: boolean
+          quiet_start: number
+          updated_at: string
+          user_id: string
+          utc_offset_minutes: number
+        }
+        Insert: {
+          created_at?: string
+          friends_enabled?: boolean
+          groups_enabled?: boolean
+          mentions_enabled?: boolean
+          messages_enabled?: boolean
+          push_enabled?: boolean
+          quiet_end?: number
+          quiet_hours_enabled?: boolean
+          quiet_start?: number
+          updated_at?: string
+          user_id: string
+          utc_offset_minutes?: number
+        }
+        Update: {
+          created_at?: string
+          friends_enabled?: boolean
+          groups_enabled?: boolean
+          mentions_enabled?: boolean
+          messages_enabled?: boolean
+          push_enabled?: boolean
+          quiet_end?: number
+          quiet_hours_enabled?: boolean
+          quiet_start?: number
+          updated_at?: string
+          user_id?: string
+          utc_offset_minutes?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "notification_prefs_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: true
             referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
@@ -441,6 +573,7 @@ export type Database = {
       }
       profiles: {
         Row: {
+          appear_offline: boolean
           avatar_color: string
           avatar_url: string | null
           banner_url: string | null
@@ -449,13 +582,18 @@ export type Database = {
           display_name: string
           id: string
           last_seen: string
+          last_seen_visibility: string
           presence: Database["public"]["Enums"]["presence_state"]
+          presence_visibility: string
           privacy_settings: Json
           pronouns: string | null
+          status_emoji: string | null
+          status_text: string
           updated_at: string
           username: string
         }
         Insert: {
+          appear_offline?: boolean
           avatar_color?: string
           avatar_url?: string | null
           banner_url?: string | null
@@ -464,13 +602,18 @@ export type Database = {
           display_name?: string
           id: string
           last_seen?: string
+          last_seen_visibility?: string
           presence?: Database["public"]["Enums"]["presence_state"]
+          presence_visibility?: string
           privacy_settings?: Json
           pronouns?: string | null
+          status_emoji?: string | null
+          status_text?: string
           updated_at?: string
           username: string
         }
         Update: {
+          appear_offline?: boolean
           avatar_color?: string
           avatar_url?: string | null
           banner_url?: string | null
@@ -479,9 +622,13 @@ export type Database = {
           display_name?: string
           id?: string
           last_seen?: string
+          last_seen_visibility?: string
           presence?: Database["public"]["Enums"]["presence_state"]
+          presence_visibility?: string
           privacy_settings?: Json
           pronouns?: string | null
+          status_emoji?: string | null
+          status_text?: string
           updated_at?: string
           username?: string
         }
@@ -496,6 +643,7 @@ export type Database = {
         Args: { _cid: string; _ids: string[] }
         Returns: number
       }
+      are_friends: { Args: { _a: string; _b: string }; Returns: boolean }
       conversation_role: {
         Args: { _cid: string; _uid: string }
         Returns: string
@@ -508,6 +656,10 @@ export type Database = {
           _title: string
         }
         Returns: string
+      }
+      delete_message_for_everyone: {
+        Args: { _mid: string }
+        Returns: undefined
       }
       friendship_state: {
         Args: { _other: string }
@@ -529,6 +681,8 @@ export type Database = {
           joined_at: string
           presence: Database["public"]["Enums"]["presence_state"]
           role: string
+          status_emoji: string
+          status_text: string
           user_id: string
           username: string
         }[]
@@ -560,8 +714,11 @@ export type Database = {
           friendship_status: string
           id: string
           incoming: boolean
+          last_seen: string
           presence: Database["public"]["Enums"]["presence_state"]
           pronouns: string
+          status_emoji: string
+          status_text: string
           username: string
         }[]
       }
@@ -574,6 +731,53 @@ export type Database = {
         Returns: undefined
       }
       safe_uuid: { Args: { _t: string }; Returns: string }
+      search_conversations: {
+        Args: { _limit?: number; _term: string }
+        Returns: {
+          avatar_color: string
+          avatar_url: string
+          description: string
+          id: string
+          kind: Database["public"]["Enums"]["conversation_kind"]
+          last_message_at: string
+          match_reason: string
+          member_count: number
+          title: string
+        }[]
+      }
+      search_messages: {
+        Args: {
+          _conversation?: string
+          _from?: string
+          _limit?: number
+          _media?: string
+          _offset?: number
+          _sender?: string
+          _term: string
+          _to?: string
+        }
+        Returns: {
+          attachment_name: string
+          attachment_size: number
+          attachment_type: string
+          attachment_url: string
+          body: string
+          conversation_avatar_url: string
+          conversation_color: string
+          conversation_id: string
+          conversation_kind: Database["public"]["Enums"]["conversation_kind"]
+          conversation_title: string
+          created_at: string
+          kind: Database["public"]["Enums"]["message_kind"]
+          message_id: string
+          sender_avatar_url: string
+          sender_color: string
+          sender_id: string
+          sender_name: string
+          sender_username: string
+          total_count: number
+        }[]
+      }
       search_profiles: {
         Args: { _limit?: number; _term: string }
         Returns: {
@@ -588,6 +792,8 @@ export type Database = {
           incoming: boolean
           presence: Database["public"]["Enums"]["presence_state"]
           pronouns: string
+          status_emoji: string
+          status_text: string
           username: string
         }[]
       }
