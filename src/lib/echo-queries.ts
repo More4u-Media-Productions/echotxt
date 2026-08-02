@@ -415,6 +415,17 @@ export function useSendMessage() {
         },
       );
       void queryClient.invalidateQueries({ queryKey: ["chats"] });
+      // Web push for everyone else in the thread (server resolves recipients).
+      if (saved.kind !== "system") {
+        void notifyNewMessage({
+          data: {
+            conversationId: input.conversationId,
+            title: saved.authorName.slice(0, 80),
+            preview: previewOf(saved.kind, saved.body).slice(0, 160) || "Sent an attachment",
+          },
+        }).catch(() => undefined);
+      }
+
     },
   });
 }
