@@ -21,6 +21,9 @@ import {
   type GroupRole,
   type MessageKind,
   type Presence,
+  type Reaction,
+  type ReplyPreview,
+  type Visibility,
 } from "@/lib/echo-data";
 
 
