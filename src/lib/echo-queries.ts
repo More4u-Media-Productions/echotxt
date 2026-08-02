@@ -1630,3 +1630,247 @@ export function useUpdateProfile() {
     },
   });
 }
+
+export function useUpdatePrivacy() {
+  const userId = useUserId();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (patch: {
+      status_text?: string;
+      status_emoji?: string | null;
+      appear_offline?: boolean;
+      presence_visibility?: Visibility;
+      last_seen_visibility?: Visibility;
+    }) => {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("id", userId!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["profile"] });
+      void queryClient.invalidateQueries({ queryKey: ["profile-preview"] });
+    },
+  });
+}
+
+/* --------------------------- notification preferences ------------------------- */
+
+export interface NotificationPrefs {
+  pushEnabled: boolean;
+  messagesEnabled: boolean;
+  mentionsEnabled: boolean;
+  friendsEnabled: boolean;
+  groupsEnabled: boolean;
+  quietHoursEnabled: boolean;
+  quietStart: number;
+  quietEnd: number;
+  utcOffsetMinutes: number;
+}
+
+export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
+  pushEnabled: true,
+  messagesEnabled: true,
+  mentionsEnabled: true,
+  friendsEnabled: true,
+  groupsEnabled: true,
+  quietHoursEnabled: false,
+  quietStart: 22,
+  quietEnd: 7,
+  utcOffsetMinutes: 0,
+};
+
+export function useNotificationPrefs() {
+  const userId = useUserId();
+  return useQuery({
+    queryKey: ["notification-prefs", userId],
+    enabled: !!userId,
+    queryFn: async (): Promise<NotificationPrefs> => {
+      const { data, error } = await supabase
+        .from("notification_prefs")
+        .select("*")
+        .eq("user_id", userId!)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return DEFAULT_NOTIFICATION_PREFS;
+      return {
+        pushEnabled: data.push_enabled,
+        messagesEnabled: data.messages_enabled,
+        mentionsEnabled: data.mentions_enabled,
+        friendsEnabled: data.friends_enabled,
+        groupsEnabled: data.groups_enabled,
+        quietHoursEnabled: data.quiet_hours_enabled,
+        quietStart: data.quiet_start,
+        quietEnd: data.quiet_end,
+        utcOffsetMinutes: data.utc_offset_minutes,
+      };
+    },
+  });
+}
+
+export function useUpdateNotificationPrefs() {
+  const userId = useUserId();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (patch: Partial<NotificationPrefs>) => {
+      const row: Record<string, unknown> = { user_id: userId! };
+      if (patch.pushEnabled !== undefined) row['push_enabled'] = patch.pushEnabled;
+      if (patch.messagesEnabled !== undefined) row['messages_enabled'] = patch.messagesEnabled;
+      if (patch.mentionsEnabled !== undefined) row['mentions_enabled'] = patch.mentionsEnabled;
+      if (patch.friendsEnabled !== undefined) row['friends_enabled'] = patch.friendsEnabled;
+      if (patch.groupsEnabled !== undefined) row['groups_enabled'] = patch.groupsEnabled;
+      if (patch.quietHoursEnabled !== undefined) row['quiet_hours_enabled'] = patch.quietHoursEnabled;
+      if (patch.quietStart !== undefined) row['quiet_start'] = patch.quietStart;
+      if (patch.quietEnd !== undefined) row['quiet_end'] = patch.quietEnd;
+      // Keep the stored offset in sync with the device so quiet hours land locally.
+      row['utc_offset_minutes'] = patch.utcOffsetMinutes ?? -new Date().getTimezoneOffset();
+      const { error } = await supabase
+        .from("notification_prefs")
+        .upsert(row as never, { onConflict: "user_id" });
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notification-prefs"] }),
+  });
+}
+
+/* ------------------------------- global search -------------------------------- */
+
+export type MediaFilter = "all" | "text" | "image" | "video" | "audio" | "file";
+
+export interface MessageSearchHit {
+  messageId: string;
+  conversationId: string;
+  conversationKind: "dm" | "group";
+  conversationName: string;
+  conversationColor: string;
+  conversationAvatarUrl: string | null;
+  senderId: string;
+  senderName: string;
+  senderUsername: string;
+  senderColor: string;
+  senderAvatarUrl: string | null;
+  kind: MessageKind;
+  body: string;
+  attachmentUrl: string | null;
+  attachmentType: string | null;
+  attachmentName: string | null;
+  attachmentSize: number | null;
+  createdAt: string;
+  totalCount: number;
+}
+
+export interface MessageSearchFilters {
+  media?: MediaFilter;
+  conversationId?: string | null;
+  senderId?: string | null;
+  from?: string | null;
+  to?: string | null;
+}
+
+const SEARCH_PAGE = 20;
+
+export function useSearchMessages(term: string, filters: MessageSearchFilters = {}) {
+  const userId = useUserId();
+  const q = term.trim();
+  const media = filters.media ?? "all";
+  const active = q.length >= 2 || media !== "all" || !!filters.conversationId || !!filters.senderId;
+
+  const query = useInfiniteQuery({
+    queryKey: [
+      "search-messages",
+      q,
+      media,
+      filters.conversationId ?? null,
+      filters.senderId ?? null,
+      filters.from ?? null,
+      filters.to ?? null,
+      userId,
+    ],
+    enabled: !!userId && active,
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }): Promise<MessageSearchHit[]> => {
+      const { data, error } = await supabase.rpc("search_messages", {
+        _term: q,
+        _limit: SEARCH_PAGE,
+        _offset: pageParam,
+        _media: media,
+        _conversation: filters.conversationId ?? undefined,
+        _sender: filters.senderId ?? undefined,
+        _from: filters.from ?? undefined,
+        _to: filters.to ?? undefined,
+      });
+      if (error) throw error;
+      return ((data ?? []) as unknown as Record<string, any>[]).map((row) => ({
+        messageId: row['message_id'],
+        conversationId: row['conversation_id'],
+        conversationKind: row['conversation_kind'],
+        conversationName: row['conversation_title'] ?? "Direct message",
+        conversationColor: row['conversation_color'],
+        conversationAvatarUrl: row['conversation_avatar_url'] ?? null,
+        senderId: row['sender_id'],
+        senderName: row['sender_name'] || row['sender_username'],
+        senderUsername: row['sender_username'],
+        senderColor: row['sender_color'],
+        senderAvatarUrl: row['sender_avatar_url'] ?? null,
+        kind: row['kind'] as MessageKind,
+        body: row['body'] ?? "",
+        attachmentUrl: row['attachment_url'] ?? null,
+        attachmentType: row['attachment_type'] ?? null,
+        attachmentName: row['attachment_name'] ?? null,
+        attachmentSize: row['attachment_size'] ?? null,
+        createdAt: row['created_at'],
+        totalCount: Number(row['total_count'] ?? 0),
+      }));
+    },
+    getNextPageParam: (last, all) =>
+      last.length < SEARCH_PAGE ? undefined : all.reduce((n, p) => n + p.length, 0),
+  });
+
+  const hits = (query.data?.pages ?? []).flat();
+  return {
+    hits,
+    total: hits[0]?.totalCount ?? 0,
+    isLoading: query.isLoading && active,
+    isError: query.isError,
+    error: query.error,
+    hasMore: query.hasNextPage,
+    loadMore: query.fetchNextPage,
+    isLoadingMore: query.isFetchingNextPage,
+    active,
+  };
+}
+
+export interface GroupSearchHit {
+  id: string;
+  title: string;
+  description: string | null;
+  color: string;
+  avatarUrl: string | null;
+  memberCount: number;
+  lastMessageAt: string;
+  matchReason: "name" | "member";
+}
+
+export function useSearchGroups(term: string) {
+  const userId = useUserId();
+  const q = term.trim();
+  return useQuery({
+    queryKey: ["search-groups", q, userId],
+    enabled: !!userId && q.length >= 2,
+    queryFn: async (): Promise<GroupSearchHit[]> => {
+      const { data, error } = await supabase.rpc("search_conversations", { _term: q, _limit: 20 });
+      if (error) throw error;
+      return ((data ?? []) as unknown as Record<string, any>[]).map((row) => ({
+        id: row['id'],
+        title: row['title'] ?? "Group",
+        description: row['description'] ?? null,
+        color: row['avatar_color'],
+        avatarUrl: row['avatar_url'] ?? null,
+        memberCount: Number(row['member_count'] ?? 0),
+        lastMessageAt: row['last_message_at'],
+        matchReason: row['match_reason'] === "member" ? "member" : "name",
+      }));
+    },
+  });
+}
