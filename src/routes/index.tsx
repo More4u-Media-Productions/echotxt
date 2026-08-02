@@ -20,7 +20,7 @@ export const Route = createFileRoute("/")({
       { property: "og:title", content: "Echo — private messaging with usernames" },
       {
         property: "og:description",
-        content: "Chats, groups, calls and message requests — no phone number required.",
+        content: "Echo is a private messenger built on @usernames instead of phone numbers. Chats, groups, calls and message requests in one calm app.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
