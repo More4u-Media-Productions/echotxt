@@ -1790,16 +1790,17 @@ export function useSearchMessages(term: string, filters: MessageSearchFilters = 
     enabled: !!userId && active,
     initialPageParam: 0,
     queryFn: async ({ pageParam }): Promise<MessageSearchHit[]> => {
-      const { data, error } = await supabase.rpc("search_messages", {
+      const args: Record<string, unknown> = {
         _term: q,
         _limit: SEARCH_PAGE,
         _offset: pageParam,
         _media: media,
-        _conversation: filters.conversationId ?? undefined,
-        _sender: filters.senderId ?? undefined,
-        _from: filters.from ?? undefined,
-        _to: filters.to ?? undefined,
-      });
+      };
+      if (filters.conversationId) args['_conversation'] = filters.conversationId;
+      if (filters.senderId) args['_sender'] = filters.senderId;
+      if (filters.from) args['_from'] = filters.from;
+      if (filters.to) args['_to'] = filters.to;
+      const { data, error } = await supabase.rpc("search_messages", args as never);
       if (error) throw error;
       return ((data ?? []) as unknown as Record<string, any>[]).map((row) => ({
         messageId: row['message_id'],
