@@ -18,6 +18,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { EchoAvatar } from "./avatar";
 import { useMyProfile, useSession } from "@/lib/session";
+import { linkPushUser, unlinkPushUser } from "@/lib/onesignal";
+
 import { useChats, useEchoRealtime, useFriendships, useNotifications } from "@/lib/echo-queries";
 
 function useTheme() {
@@ -51,9 +53,16 @@ export function AppShell({
   const notifications = useNotifications();
   useEchoRealtime();
 
+  const sessionUserId = session?.user.id ?? null;
+  useEffect(() => {
+    if (sessionUserId) linkPushUser(sessionUserId);
+    else unlinkPushUser();
+  }, [sessionUserId]);
+
   useEffect(() => {
     if (!loading && !session && !error) void navigate({ to: "/auth", replace: true });
   }, [loading, session, error, navigate]);
+
 
   if (loading && !error) {
     return (

@@ -7,6 +7,8 @@ import {
 } from "@tanstack/react-query";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { notifyNewMessage } from "@/lib/push.functions";
+
 import { toProfile, useUserId, type ProfileRow } from "@/lib/session";
 import {
   clockTime,
@@ -230,6 +232,8 @@ function mapMessageRow(row: Record<string, any>, userId: string | null): EchoMes
     attachmentUrl: row['attachment_url'] ?? null,
     attachmentType: row['attachment_type'] ?? null,
     attachmentName: row['attachment_name'] ?? null,
+    attachmentSize: row['attachment_size'] ?? null,
+
     createdAt: row['created_at'],
     time: clockTime(row['created_at']),
     edited: !!row['edited_at'],
@@ -320,6 +324,10 @@ export function useSendMessage() {
       body: string;
       kind?: MessageKind;
       metadata?: Record<string, unknown>;
+      attachmentUrl?: string | null;
+      attachmentType?: string | null;
+      attachmentName?: string | null;
+      attachmentSize?: number | null;
       tempId?: string;
     }) => {
       const { data, error } = await supabase
@@ -330,12 +338,17 @@ export function useSendMessage() {
           body: input.body,
           kind: input.kind ?? "text",
           metadata: (input.metadata ?? {}) as never,
+          attachment_url: input.attachmentUrl ?? null,
+          attachment_type: input.attachmentType ?? null,
+          attachment_name: input.attachmentName ?? null,
+          attachment_size: input.attachmentSize ?? null,
         })
         .select(MESSAGE_SELECT)
         .single();
       if (error) throw error;
       return mapMessageRow(data as Record<string, any>, userId);
     },
+
     onMutate: async (input) => {
       const tempId = input.tempId ?? `temp-${crypto.randomUUID()}`;
       input.tempId = tempId;
@@ -353,9 +366,11 @@ export function useSendMessage() {
         kind: input.kind ?? "text",
         body: input.body,
         metadata: input.metadata ?? {},
-        attachmentUrl: null,
-        attachmentType: null,
-        attachmentName: null,
+        attachmentUrl: input.attachmentUrl ?? null,
+        attachmentType: input.attachmentType ?? null,
+        attachmentName: input.attachmentName ?? null,
+        attachmentSize: input.attachmentSize ?? null,
+
         createdAt: now,
         time: clockTime(now),
         edited: false,
@@ -402,6 +417,17 @@ export function useSendMessage() {
         },
       );
       void queryClient.invalidateQueries({ queryKey: ["chats"] });
+      // Web push for everyone else in the thread (server resolves recipients).
+      if (saved.kind !== "system") {
+        void notifyNewMessage({
+          data: {
+            conversationId: input.conversationId,
+            title: saved.authorName.slice(0, 80),
+            preview: previewOf(saved.kind, saved.body).slice(0, 160) || "Sent an attachment",
+          },
+        }).catch(() => undefined);
+      }
+
     },
   });
 }
@@ -417,6 +443,28 @@ export function useDiscardFailedMessage() {
     );
   };
 }
+
+/** Deletes one of my messages; the DB trigger removes any attached file. */
+export function useDeleteMessage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { conversationId: string; messageId: string }) => {
+      const { error } = await supabase.from("messages").delete().eq("id", input.messageId);
+      if (error) throw error;
+    },
+    onSuccess: (_r, input) => {
+      queryClient.setQueryData<InfiniteData<MessagePage, string | null>>(
+        ["messages", input.conversationId],
+        (old) =>
+          old
+            ? { ...old, pages: old.pages.map((p) => p.filter((m) => m.id !== input.messageId)) }
+            : old,
+      );
+      void queryClient.invalidateQueries({ queryKey: ["chats"] });
+    },
+  });
+}
+
 
 export function useToggleReaction() {
   const userId = useUserId();
