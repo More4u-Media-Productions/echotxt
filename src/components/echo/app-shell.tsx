@@ -15,6 +15,7 @@ import {
   WifiOff,
 } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
+import { GlobalSearch } from "./global-search";
 import { cn } from "@/lib/utils";
 import { EchoAvatar } from "./avatar";
 import { useMyProfile, useSession } from "@/lib/session";
@@ -52,6 +53,19 @@ export function AppShell({
   const friends = useFriendships();
   const notifications = useNotifications();
   useEchoRealtime();
+
+  const [searchOpen, setSearchOpen] = useState(false);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, []);
 
   const sessionUserId = session?.user.id ?? null;
   useEffect(() => {
@@ -207,6 +221,14 @@ export function AppShell({
             <div className="flex shrink-0 items-center gap-1.5">
               {actions}
               <button
+                onClick={() => setSearchOpen(true)}
+                className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                aria-label="Search Echo"
+                title="Search (Ctrl/Cmd + K)"
+              >
+                <Search className="h-[18px] w-[18px]" />
+              </button>
+              <button
                 onClick={toggle}
                 className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground lg:hidden"
                 aria-label="Toggle theme"
@@ -251,6 +273,8 @@ export function AppShell({
           })}
         </div>
       </nav>
+
+      <GlobalSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
     </div>
   );
 }

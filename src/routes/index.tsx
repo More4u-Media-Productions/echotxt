@@ -26,17 +26,22 @@ export const Route = createFileRoute("/")({
       { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
-  validateSearch: (search: Record<string, unknown>): { c?: string } => {
+  validateSearch: (search: Record<string, unknown>): { c?: string; m?: string } => {
     const c = search['c'];
-    return typeof c === "string" && c ? { c } : {};
+    const m = search['m'];
+    return {
+      ...(typeof c === "string" && c ? { c } : {}),
+      ...(typeof m === "string" && m ? { m } : {}),
+    };
   },
+
   component: ChatsPage,
 });
 
 type Filter = "all" | "unread" | "requests" | "archived";
 
 function ChatsPage() {
-  const { c } = Route.useSearch();
+  const { c, m } = Route.useSearch();
   const chats = useChats();
   const flags = useUpdateChatFlags();
   const respondInvite = useRespondGroupInvite();
@@ -218,7 +223,11 @@ function ChatsPage() {
 
         <div className={cn("min-h-0", !open && "hidden lg:block")}>
           {open ? (
-            <Conversation chat={open} onBack={() => setOpenId(null)} />
+            <Conversation
+              chat={open}
+              onBack={() => setOpenId(null)}
+              focusMessageId={open.id === c ? (m ?? null) : null}
+            />
           ) : (
             <div className="hidden h-full place-items-center lg:grid">
               <EmptyState

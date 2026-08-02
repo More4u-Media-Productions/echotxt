@@ -21,6 +21,9 @@ import {
   type GroupRole,
   type MessageKind,
   type Presence,
+  type Reaction,
+  type ReplyPreview,
+  type Visibility,
 } from "@/lib/echo-data";
 
 
@@ -206,19 +209,40 @@ function previewOf(kind: string, body: string): string {
 
 const PAGE_SIZE = 30;
 
-const MESSAGE_SELECT = "*, profiles!messages_sender_id_fkey(*), message_reactions(emoji, user_id)";
+const MESSAGE_SELECT =
+  "*, profiles!messages_sender_id_fkey(*), message_reactions(emoji, user_id), " +
+  "message_bookmarks(user_id), message_hides(user_id), " +
+  "reply:reply_to(id, body, kind, deleted_at, sender_id, profiles!messages_sender_id_fkey(display_name, username))";
 
 type MessagePage = EchoMessage[];
 
+function replyPreviewOf(raw: unknown): ReplyPreview | null {
+  const row = (Array.isArray(raw) ? raw[0] : raw) as Record<string, any> | null | undefined;
+  if (!row) return null;
+  const author = (Array.isArray(row['profiles']) ? row['profiles'][0] : row['profiles']) as
+    | { display_name?: string; username?: string }
+    | null;
+  const deleted = !!row['deleted_at'];
+  return {
+    id: row['id'],
+    authorName: author?.display_name || author?.username || "Someone",
+    body: deleted ? "Message deleted" : previewOf(row['kind'], row['body'] ?? ""),
+    kind: (row['kind'] ?? "text") as MessageKind,
+    deleted,
+  };
+}
+
 function mapMessageRow(row: Record<string, any>, userId: string | null): EchoMessage {
   const author = toProfile(row['profiles'] as unknown as ProfileRow);
-  const grouped = new Map<string, { emoji: string; count: number; mine: boolean }>();
+  const grouped = new Map<string, Reaction>();
   for (const r of (row['message_reactions'] ?? []) as { emoji: string; user_id: string }[]) {
-    const entry = grouped.get(r.emoji) ?? { emoji: r.emoji, count: 0, mine: false };
+    const entry = grouped.get(r.emoji) ?? { emoji: r.emoji, count: 0, mine: false, userIds: [] };
     entry.count += 1;
+    entry.userIds.push(r.user_id);
     if (r.user_id === userId) entry.mine = true;
     grouped.set(r.emoji, entry);
   }
+  const deleted = !!row['deleted_at'];
   return {
     id: row['id'],
     authorId: row['sender_id'],
@@ -227,22 +251,34 @@ function mapMessageRow(row: Record<string, any>, userId: string | null): EchoMes
     authorInitials: author.avatar,
     authorAvatarUrl: author.avatarUrl,
     kind: row['kind'] as MessageKind,
-    body: row['body'],
+    body: deleted ? "" : row['body'],
     metadata: (row['metadata'] ?? {}) as Record<string, unknown>,
-    attachmentUrl: row['attachment_url'] ?? null,
-    attachmentType: row['attachment_type'] ?? null,
-    attachmentName: row['attachment_name'] ?? null,
-    attachmentSize: row['attachment_size'] ?? null,
+    attachmentUrl: deleted ? null : (row['attachment_url'] ?? null),
+    attachmentType: deleted ? null : (row['attachment_type'] ?? null),
+    attachmentName: deleted ? null : (row['attachment_name'] ?? null),
+    attachmentSize: deleted ? null : (row['attachment_size'] ?? null),
 
     createdAt: row['created_at'],
     time: clockTime(row['created_at']),
-    edited: !!row['edited_at'],
-    pinned: row['pinned'],
+    edited: !deleted && !!row['edited_at'],
+    editedAt: row['edited_at'] ?? null,
+    pinned: !deleted && row['pinned'],
+    bookmarked: ((row['message_bookmarks'] ?? []) as unknown[]).length > 0,
+    deleted,
+    deletedByMe: row['deleted_by'] === userId,
+    replyToId: row['reply_to'] ?? null,
+    replyTo: deleted ? null : replyPreviewOf(row['reply']),
     reactions: [...grouped.values()],
     readByAll: false,
     status: "sent",
   } satisfies EchoMessage;
 }
+
+/** True when the signed-in user chose "delete for me" on this row. */
+function isHidden(row: Record<string, any>): boolean {
+  return ((row['message_hides'] ?? []) as unknown[]).length > 0;
+}
+
 
 /**
  * Keyset-paginated message history, newest page first. Flattened output is in
@@ -265,7 +301,9 @@ export function useMessages(conversationId: string | null) {
       if (pageParam) request = request.lt("created_at", pageParam);
       const { data, error } = await request;
       if (error) throw error;
-      return (data ?? []).map((row) => mapMessageRow(row as Record<string, any>, userId));
+      return (data ?? [])
+        .filter((row) => !isHidden(row as Record<string, any>))
+        .map((row) => mapMessageRow(row as Record<string, any>, userId));
     },
     getNextPageParam: (last) =>
       last.length < PAGE_SIZE ? undefined : (last[last.length - 1]?.createdAt ?? undefined),
@@ -328,6 +366,8 @@ export function useSendMessage() {
       attachmentType?: string | null;
       attachmentName?: string | null;
       attachmentSize?: number | null;
+      replyToId?: string | null;
+      replyTo?: ReplyPreview | null;
       tempId?: string;
     }) => {
       const { data, error } = await supabase
@@ -342,6 +382,7 @@ export function useSendMessage() {
           attachment_type: input.attachmentType ?? null,
           attachment_name: input.attachmentName ?? null,
           attachment_size: input.attachmentSize ?? null,
+          reply_to: input.replyToId ?? null,
         })
         .select(MESSAGE_SELECT)
         .single();
@@ -374,11 +415,18 @@ export function useSendMessage() {
         createdAt: now,
         time: clockTime(now),
         edited: false,
+        editedAt: null,
         pinned: false,
+        bookmarked: false,
+        deleted: false,
+        deletedByMe: false,
+        replyToId: input.replyToId ?? null,
+        replyTo: input.replyTo ?? null,
         reactions: [],
         readByAll: false,
         status: "sending",
       };
+
       queryClient.setQueryData<InfiniteData<MessagePage, string | null>>(key, (old) => {
         if (!old) return old;
         const pages = old.pages.map((p) => [...p]);
@@ -444,13 +492,89 @@ export function useDiscardFailedMessage() {
   };
 }
 
-/** Deletes one of my messages; the DB trigger removes any attached file. */
+function patchMessage(
+  queryClient: ReturnType<typeof useQueryClient>,
+  conversationId: string,
+  messageId: string,
+  patch: (message: EchoMessage) => EchoMessage,
+) {
+  queryClient.setQueryData<InfiniteData<MessagePage, string | null>>(
+    ["messages", conversationId],
+    (old) =>
+      old
+        ? {
+            ...old,
+            pages: old.pages.map((page) =>
+              page.map((m) => (m.id === messageId ? patch(m) : m)),
+            ),
+          }
+        : old,
+  );
+}
+
+/**
+ * "Delete for everyone": leaves a tombstone so the row stays as a reply target
+ * and every member sees the same placeholder. Any attachment is removed too.
+ */
 export function useDeleteMessage() {
+  const userId = useUserId();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      conversationId: string;
+      messageId: string;
+      attachmentUrl?: string | null;
+    }) => {
+      const { error } = await supabase
+        .from("messages")
+        .update({
+          deleted_at: new Date().toISOString(),
+          deleted_by: userId!,
+          body: "",
+          attachment_url: null,
+          attachment_type: null,
+          attachment_name: null,
+          attachment_size: null,
+          pinned: false,
+          metadata: {} as never,
+        })
+        .eq("id", input.messageId);
+      if (error) throw error;
+      if (input.attachmentUrl) {
+        await supabase.storage.from("chat-media").remove([input.attachmentUrl]);
+      }
+      await supabase.from("message_reactions").delete().eq("message_id", input.messageId);
+    },
+    onSuccess: (_r, input) => {
+      patchMessage(queryClient, input.conversationId, input.messageId, (m) => ({
+        ...m,
+        deleted: true,
+        deletedByMe: true,
+        body: "",
+        attachmentUrl: null,
+        attachmentType: null,
+        attachmentName: null,
+        attachmentSize: null,
+        pinned: false,
+        reactions: [],
+        replyTo: null,
+      }));
+      void queryClient.invalidateQueries({ queryKey: ["messages", input.conversationId] });
+      void queryClient.invalidateQueries({ queryKey: ["chats"] });
+    },
+  });
+}
+
+/** "Delete for me": hides the message for the signed-in user only. */
+export function useHideMessage() {
+  const userId = useUserId();
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async (input: { conversationId: string; messageId: string }) => {
-      const { error } = await supabase.from("messages").delete().eq("id", input.messageId);
-      if (error) throw error;
+      const { error } = await supabase
+        .from("message_hides")
+        .insert({ message_id: input.messageId, user_id: userId! });
+      if (error && error.code !== "23505") throw error;
     },
     onSuccess: (_r, input) => {
       queryClient.setQueryData<InfiniteData<MessagePage, string | null>>(
@@ -460,10 +584,176 @@ export function useDeleteMessage() {
             ? { ...old, pages: old.pages.map((p) => p.filter((m) => m.id !== input.messageId)) }
             : old,
       );
+      void queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
+    },
+  });
+}
+
+/** Edits the text of one of my own messages. */
+export function useEditMessage() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: { conversationId: string; messageId: string; body: string }) => {
+      const body = input.body.trim();
+      if (!body) throw new Error("Message can't be empty.");
+      const { error } = await supabase
+        .from("messages")
+        .update({ body, edited_at: new Date().toISOString() })
+        .eq("id", input.messageId);
+      if (error) throw error;
+      return body;
+    },
+    onSuccess: (body, input) => {
+      patchMessage(queryClient, input.conversationId, input.messageId, (m) => ({
+        ...m,
+        body,
+        edited: true,
+        editedAt: new Date().toISOString(),
+      }));
       void queryClient.invalidateQueries({ queryKey: ["chats"] });
     },
   });
 }
+
+/** Pins or unpins a message for the whole conversation. */
+export function useTogglePin() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      conversationId: string;
+      messageId: string;
+      pinned: boolean;
+    }) => {
+      const { error } = await supabase.rpc("set_message_pinned", {
+        _mid: input.messageId,
+        _pinned: input.pinned,
+      });
+      if (error) throw error;
+    },
+    onSuccess: (_r, input) => {
+      patchMessage(queryClient, input.conversationId, input.messageId, (m) => ({
+        ...m,
+        pinned: input.pinned,
+      }));
+      void queryClient.invalidateQueries({ queryKey: ["pinned", input.conversationId] });
+    },
+  });
+}
+
+/** Private per-user bookmark ("saved message"). */
+export function useToggleBookmark() {
+  const userId = useUserId();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (input: {
+      conversationId: string;
+      messageId: string;
+      bookmarked: boolean;
+    }) => {
+      if (input.bookmarked) {
+        const { error } = await supabase
+          .from("message_bookmarks")
+          .delete()
+          .eq("message_id", input.messageId)
+          .eq("user_id", userId!);
+        if (error) throw error;
+      } else {
+        const { error } = await supabase
+          .from("message_bookmarks")
+          .insert({ message_id: input.messageId, user_id: userId! });
+        if (error && error.code !== "23505") throw error;
+      }
+    },
+    onSuccess: (_r, input) => {
+      patchMessage(queryClient, input.conversationId, input.messageId, (m) => ({
+        ...m,
+        bookmarked: !input.bookmarked,
+      }));
+      void queryClient.invalidateQueries({ queryKey: ["bookmarks"] });
+    },
+  });
+}
+
+/** Pinned messages for the conversation header strip. */
+export function usePinnedMessages(conversationId: string | null) {
+  const userId = useUserId();
+  return useQuery({
+    queryKey: ["pinned", conversationId],
+    enabled: !!conversationId && !!userId,
+    queryFn: async (): Promise<EchoMessage[]> => {
+      const { data, error } = await supabase
+        .from("messages")
+        .select(MESSAGE_SELECT)
+        .eq("conversation_id", conversationId!)
+        .eq("pinned", true)
+        .is("deleted_at", null)
+        .order("created_at", { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return (data ?? [])
+        .filter((row) => !isHidden(row as Record<string, any>))
+        .map((row) => mapMessageRow(row as Record<string, any>, userId));
+    },
+  });
+}
+
+export interface BookmarkedMessage extends EchoMessage {
+  conversationId: string;
+  conversationName: string;
+}
+
+/** Every message the signed-in user saved, newest first. */
+export function useBookmarks() {
+  const userId = useUserId();
+  return useQuery({
+    queryKey: ["bookmarks", userId],
+    enabled: !!userId,
+    queryFn: async (): Promise<BookmarkedMessage[]> => {
+      const { data, error } = await supabase
+        .from("message_bookmarks")
+        .select(
+          `created_at, messages!inner(${MESSAGE_SELECT}, conversations!inner(id, kind, title))`,
+        )
+        .eq("user_id", userId!)
+        .order("created_at", { ascending: false })
+        .limit(100);
+      if (error) throw error;
+      return (data ?? [])
+        .map((row): BookmarkedMessage | null => {
+          const message = (row as Record<string, any>)['messages'] as Record<string, any>;
+          if (!message || message['deleted_at'] || isHidden(message)) return null;
+          const convo = message['conversations'] as Record<string, any>;
+          return {
+            ...mapMessageRow(message, userId),
+            bookmarked: true,
+            conversationId: convo?.['id'] ?? message['conversation_id'],
+            conversationName:
+              convo?.['kind'] === "group" ? (convo['title'] ?? "Group") : "Direct message",
+          };
+        })
+        .filter((m): m is BookmarkedMessage => m !== null);
+    },
+  });
+}
+
+/** Loads a single message plus its neighbours so search results can jump to it. */
+export function useMessageContext(conversationId: string | null, messageId: string | null) {
+  const userId = useUserId();
+  return useQuery({
+    queryKey: ["message-context", conversationId, messageId],
+    enabled: !!conversationId && !!messageId && !!userId,
+    queryFn: async (): Promise<EchoMessage | null> => {
+      const { data, error } = await supabase
+        .from("messages")
+        .select(MESSAGE_SELECT)
+        .eq("id", messageId!)
+        .maybeSingle();
+      if (error) throw error;
+      return data ? mapMessageRow(data as Record<string, any>, userId) : null;
+    },
+  });
+}
+
 
 
 export function useToggleReaction() {
@@ -879,6 +1169,9 @@ interface SearchRow {
   avatar_url: string | null;
   banner_url: string | null;
   presence: Presence;
+  status_text?: string | null;
+  status_emoji?: string | null;
+  last_seen?: string | null;
   friendship_id: string | null;
   friendship_status: FriendStatus | null;
   incoming: boolean | null;
@@ -896,16 +1189,22 @@ function toDiscovered(row: SearchRow): DiscoveredProfile {
     avatar_url: row.avatar_url,
     banner_url: row.banner_url,
     presence: row.presence,
-    last_seen: new Date().toISOString(),
+    // The RPC masks presence and last-seen according to the other user's
+    // privacy settings, so whatever comes back is already safe to show.
+    last_seen: row.last_seen ?? new Date().toISOString(),
     created_at: new Date().toISOString(),
+    status_text: row.status_text ?? "",
+    status_emoji: row.status_emoji ?? null,
   });
   return {
     ...base,
+    lastSeen: row.last_seen ?? "",
     friendshipId: row.friendship_id ?? null,
     friendshipStatus: row.friendship_status ?? null,
     incoming: !!row.incoming,
   };
 }
+
 
 export function useSearchProfiles(term: string) {
   const userId = useUserId();
@@ -1328,6 +1627,251 @@ export function useUpdateProfile() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["profile"] });
       void queryClient.invalidateQueries({ queryKey: ["chats"] });
+    },
+  });
+}
+
+export function useUpdatePrivacy() {
+  const userId = useUserId();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (patch: {
+      status_text?: string;
+      status_emoji?: string | null;
+      appear_offline?: boolean;
+      presence_visibility?: Visibility;
+      last_seen_visibility?: Visibility;
+    }) => {
+      const { error } = await supabase
+        .from("profiles")
+        .update({ ...patch, updated_at: new Date().toISOString() })
+        .eq("id", userId!);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["profile"] });
+      void queryClient.invalidateQueries({ queryKey: ["profile-preview"] });
+    },
+  });
+}
+
+/* --------------------------- notification preferences ------------------------- */
+
+export interface NotificationPrefs {
+  pushEnabled: boolean;
+  messagesEnabled: boolean;
+  mentionsEnabled: boolean;
+  friendsEnabled: boolean;
+  groupsEnabled: boolean;
+  quietHoursEnabled: boolean;
+  quietStart: number;
+  quietEnd: number;
+  utcOffsetMinutes: number;
+}
+
+export const DEFAULT_NOTIFICATION_PREFS: NotificationPrefs = {
+  pushEnabled: true,
+  messagesEnabled: true,
+  mentionsEnabled: true,
+  friendsEnabled: true,
+  groupsEnabled: true,
+  quietHoursEnabled: false,
+  quietStart: 22,
+  quietEnd: 7,
+  utcOffsetMinutes: 0,
+};
+
+export function useNotificationPrefs() {
+  const userId = useUserId();
+  return useQuery({
+    queryKey: ["notification-prefs", userId],
+    enabled: !!userId,
+    queryFn: async (): Promise<NotificationPrefs> => {
+      const { data, error } = await supabase
+        .from("notification_prefs")
+        .select("*")
+        .eq("user_id", userId!)
+        .maybeSingle();
+      if (error) throw error;
+      if (!data) return DEFAULT_NOTIFICATION_PREFS;
+      return {
+        pushEnabled: data.push_enabled,
+        messagesEnabled: data.messages_enabled,
+        mentionsEnabled: data.mentions_enabled,
+        friendsEnabled: data.friends_enabled,
+        groupsEnabled: data.groups_enabled,
+        quietHoursEnabled: data.quiet_hours_enabled,
+        quietStart: data.quiet_start,
+        quietEnd: data.quiet_end,
+        utcOffsetMinutes: data.utc_offset_minutes,
+      };
+    },
+  });
+}
+
+export function useUpdateNotificationPrefs() {
+  const userId = useUserId();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (patch: Partial<NotificationPrefs>) => {
+      const row: Record<string, unknown> = { user_id: userId! };
+      if (patch.pushEnabled !== undefined) row['push_enabled'] = patch.pushEnabled;
+      if (patch.messagesEnabled !== undefined) row['messages_enabled'] = patch.messagesEnabled;
+      if (patch.mentionsEnabled !== undefined) row['mentions_enabled'] = patch.mentionsEnabled;
+      if (patch.friendsEnabled !== undefined) row['friends_enabled'] = patch.friendsEnabled;
+      if (patch.groupsEnabled !== undefined) row['groups_enabled'] = patch.groupsEnabled;
+      if (patch.quietHoursEnabled !== undefined) row['quiet_hours_enabled'] = patch.quietHoursEnabled;
+      if (patch.quietStart !== undefined) row['quiet_start'] = patch.quietStart;
+      if (patch.quietEnd !== undefined) row['quiet_end'] = patch.quietEnd;
+      // Keep the stored offset in sync with the device so quiet hours land locally.
+      row['utc_offset_minutes'] = patch.utcOffsetMinutes ?? -new Date().getTimezoneOffset();
+      const { error } = await supabase
+        .from("notification_prefs")
+        .upsert(row as never, { onConflict: "user_id" });
+      if (error) throw error;
+    },
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["notification-prefs"] }),
+  });
+}
+
+/* ------------------------------- global search -------------------------------- */
+
+export type MediaFilter = "all" | "text" | "image" | "video" | "audio" | "file";
+
+export interface MessageSearchHit {
+  messageId: string;
+  conversationId: string;
+  conversationKind: "dm" | "group";
+  conversationName: string;
+  conversationColor: string;
+  conversationAvatarUrl: string | null;
+  senderId: string;
+  senderName: string;
+  senderUsername: string;
+  senderColor: string;
+  senderAvatarUrl: string | null;
+  kind: MessageKind;
+  body: string;
+  attachmentUrl: string | null;
+  attachmentType: string | null;
+  attachmentName: string | null;
+  attachmentSize: number | null;
+  createdAt: string;
+  totalCount: number;
+}
+
+export interface MessageSearchFilters {
+  media?: MediaFilter;
+  conversationId?: string | null;
+  senderId?: string | null;
+  from?: string | null;
+  to?: string | null;
+}
+
+const SEARCH_PAGE = 20;
+
+export function useSearchMessages(term: string, filters: MessageSearchFilters = {}) {
+  const userId = useUserId();
+  const q = term.trim();
+  const media = filters.media ?? "all";
+  const active = q.length >= 2 || media !== "all" || !!filters.conversationId || !!filters.senderId;
+
+  const query = useInfiniteQuery({
+    queryKey: [
+      "search-messages",
+      q,
+      media,
+      filters.conversationId ?? null,
+      filters.senderId ?? null,
+      filters.from ?? null,
+      filters.to ?? null,
+      userId,
+    ],
+    enabled: !!userId && active,
+    initialPageParam: 0,
+    queryFn: async ({ pageParam }): Promise<MessageSearchHit[]> => {
+      const args: Record<string, unknown> = {
+        _term: q,
+        _limit: SEARCH_PAGE,
+        _offset: pageParam,
+        _media: media,
+      };
+      if (filters.conversationId) args['_conversation'] = filters.conversationId;
+      if (filters.senderId) args['_sender'] = filters.senderId;
+      if (filters.from) args['_from'] = filters.from;
+      if (filters.to) args['_to'] = filters.to;
+      const { data, error } = await supabase.rpc("search_messages", args as never);
+      if (error) throw error;
+      return ((data ?? []) as unknown as Record<string, any>[]).map((row) => ({
+        messageId: row['message_id'],
+        conversationId: row['conversation_id'],
+        conversationKind: row['conversation_kind'],
+        conversationName: row['conversation_title'] ?? "Direct message",
+        conversationColor: row['conversation_color'],
+        conversationAvatarUrl: row['conversation_avatar_url'] ?? null,
+        senderId: row['sender_id'],
+        senderName: row['sender_name'] || row['sender_username'],
+        senderUsername: row['sender_username'],
+        senderColor: row['sender_color'],
+        senderAvatarUrl: row['sender_avatar_url'] ?? null,
+        kind: row['kind'] as MessageKind,
+        body: row['body'] ?? "",
+        attachmentUrl: row['attachment_url'] ?? null,
+        attachmentType: row['attachment_type'] ?? null,
+        attachmentName: row['attachment_name'] ?? null,
+        attachmentSize: row['attachment_size'] ?? null,
+        createdAt: row['created_at'],
+        totalCount: Number(row['total_count'] ?? 0),
+      }));
+    },
+    getNextPageParam: (last, all) =>
+      last.length < SEARCH_PAGE ? undefined : all.reduce((n, p) => n + p.length, 0),
+  });
+
+  const hits = (query.data?.pages ?? []).flat();
+  return {
+    hits,
+    total: hits[0]?.totalCount ?? 0,
+    isLoading: query.isLoading && active,
+    isError: query.isError,
+    error: query.error,
+    hasMore: query.hasNextPage,
+    loadMore: query.fetchNextPage,
+    isLoadingMore: query.isFetchingNextPage,
+    active,
+  };
+}
+
+export interface GroupSearchHit {
+  id: string;
+  title: string;
+  description: string | null;
+  color: string;
+  avatarUrl: string | null;
+  memberCount: number;
+  lastMessageAt: string;
+  matchReason: "name" | "member";
+}
+
+export function useSearchGroups(term: string) {
+  const userId = useUserId();
+  const q = term.trim();
+  return useQuery({
+    queryKey: ["search-groups", q, userId],
+    enabled: !!userId && q.length >= 2,
+    queryFn: async (): Promise<GroupSearchHit[]> => {
+      const { data, error } = await supabase.rpc("search_conversations", { _term: q, _limit: 20 });
+      if (error) throw error;
+      return ((data ?? []) as unknown as Record<string, any>[]).map((row) => ({
+        id: row['id'],
+        title: row['title'] ?? "Group",
+        description: row['description'] ?? null,
+        color: row['avatar_color'],
+        avatarUrl: row['avatar_url'] ?? null,
+        memberCount: Number(row['member_count'] ?? 0),
+        lastMessageAt: row['last_message_at'],
+        matchReason: row['match_reason'] === "member" ? "member" : "name",
+      }));
     },
   });
 }

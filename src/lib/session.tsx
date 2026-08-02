@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { Session } from "@supabase/supabase-js";
 import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { initialsOf, type EchoProfile, type Presence } from "@/lib/echo-data";
+import { initialsOf, type EchoProfile, type Presence, type Visibility } from "@/lib/echo-data";
 
 const SESSION_LOAD_TIMEOUT_MS = 10_000;
 
@@ -132,6 +132,15 @@ export interface ProfileRow {
   presence: Presence;
   last_seen: string;
   created_at: string;
+  status_text?: string | null;
+  status_emoji?: string | null;
+  appear_offline?: boolean | null;
+  presence_visibility?: string | null;
+  last_seen_visibility?: string | null;
+}
+
+function visibility(value: unknown): Visibility {
+  return value === "friends" || value === "nobody" ? value : "everyone";
 }
 
 export function toProfile(row: ProfileRow): EchoProfile {
@@ -149,8 +158,14 @@ export function toProfile(row: ProfileRow): EchoProfile {
     presence: row.presence,
     lastSeen: row.last_seen,
     joined: row.created_at,
+    statusText: row.status_text ?? "",
+    statusEmoji: row.status_emoji ?? null,
+    appearOffline: row.appear_offline ?? false,
+    presenceVisibility: visibility(row.presence_visibility),
+    lastSeenVisibility: visibility(row.last_seen_visibility),
   };
 }
+
 
 function slugify(value: string): string {
   const clean = value.toLowerCase().replace(/[^a-z0-9_.]/g, "");
