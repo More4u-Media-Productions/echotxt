@@ -801,6 +801,10 @@ export type Database = {
         Args: { _cid: string; _role: string; _uid: string }
         Returns: undefined
       }
+      set_message_pinned: {
+        Args: { _mid: string; _pinned: boolean }
+        Returns: undefined
+      }
       start_dm: { Args: { _other: string }; Returns: string }
       update_group: {
         Args: {
