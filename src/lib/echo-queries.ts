@@ -322,6 +322,10 @@ export function useSendMessage() {
       body: string;
       kind?: MessageKind;
       metadata?: Record<string, unknown>;
+      attachmentUrl?: string | null;
+      attachmentType?: string | null;
+      attachmentName?: string | null;
+      attachmentSize?: number | null;
       tempId?: string;
     }) => {
       const { data, error } = await supabase
@@ -332,12 +336,17 @@ export function useSendMessage() {
           body: input.body,
           kind: input.kind ?? "text",
           metadata: (input.metadata ?? {}) as never,
+          attachment_url: input.attachmentUrl ?? null,
+          attachment_type: input.attachmentType ?? null,
+          attachment_name: input.attachmentName ?? null,
+          attachment_size: input.attachmentSize ?? null,
         })
         .select(MESSAGE_SELECT)
         .single();
       if (error) throw error;
       return mapMessageRow(data as Record<string, any>, userId);
     },
+
     onMutate: async (input) => {
       const tempId = input.tempId ?? `temp-${crypto.randomUUID()}`;
       input.tempId = tempId;
