@@ -1169,6 +1169,9 @@ interface SearchRow {
   avatar_url: string | null;
   banner_url: string | null;
   presence: Presence;
+  status_text?: string | null;
+  status_emoji?: string | null;
+  last_seen?: string | null;
   friendship_id: string | null;
   friendship_status: FriendStatus | null;
   incoming: boolean | null;
@@ -1186,16 +1189,22 @@ function toDiscovered(row: SearchRow): DiscoveredProfile {
     avatar_url: row.avatar_url,
     banner_url: row.banner_url,
     presence: row.presence,
-    last_seen: new Date().toISOString(),
+    // The RPC masks presence and last-seen according to the other user's
+    // privacy settings, so whatever comes back is already safe to show.
+    last_seen: row.last_seen ?? new Date().toISOString(),
     created_at: new Date().toISOString(),
+    status_text: row.status_text ?? "",
+    status_emoji: row.status_emoji ?? null,
   });
   return {
     ...base,
+    lastSeen: row.last_seen ?? "",
     friendshipId: row.friendship_id ?? null,
     friendshipStatus: row.friendship_status ?? null,
     incoming: !!row.incoming,
   };
 }
+
 
 export function useSearchProfiles(term: string) {
   const userId = useUserId();
