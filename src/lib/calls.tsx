@@ -587,6 +587,9 @@ export function CallProvider({ children }: { children: ReactNode }) {
       ringTimerRef.current = setTimeout(() => {
         if (peersRef.current.size === 0) {
           void supabase.rpc("end_call", { _call: callId });
+          void notifyCall({
+            data: { conversationId: input.conversationId, media: input.media, kind: "missed" },
+          }).catch(() => undefined);
           teardown("missed");
           toast("No answer");
         }
