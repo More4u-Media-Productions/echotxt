@@ -347,14 +347,14 @@ export function Conversation({
           </>
         )}
         <button
-          onClick={() => onCall?.("voice")}
+          onClick={() => (onCall ? onCall("voice") : void placeCall("voice"))}
           className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-secondary"
           aria-label="Voice call"
         >
           <Phone className="h-[18px] w-[18px]" />
         </button>
         <button
-          onClick={() => onCall?.("video")}
+          onClick={() => (onCall ? onCall("video") : void placeCall("video"))}
           className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-secondary"
           aria-label="Video call"
         >
