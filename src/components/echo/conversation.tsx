@@ -70,6 +70,17 @@ export function Conversation({
   focusMessageId?: string | null;
 }) {
   const userId = useUserId();
+  const { startCall } = useCallEngine();
+  const placeCall = (media: "voice" | "video") =>
+    startCall({
+      conversationId: chat.id,
+      media,
+      title: chat.name,
+      avatar: chat.avatar,
+      avatarUrl: chat.avatarUrl,
+      color: chat.color,
+      isGroup: chat.kind === "group",
+    });
   const myProfile = useMyProfile();
   const messages = useMessages(chat.id);
   const receipts = useReadReceipts(chat.id);
