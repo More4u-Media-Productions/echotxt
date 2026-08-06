@@ -14,6 +14,100 @@ export type Database = {
   }
   public: {
     Tables: {
+      call_participants: {
+        Row: {
+          call_id: string
+          invited_at: string
+          joined_at: string | null
+          left_at: string | null
+          state: string
+          user_id: string
+        }
+        Insert: {
+          call_id: string
+          invited_at?: string
+          joined_at?: string | null
+          left_at?: string | null
+          state?: string
+          user_id: string
+        }
+        Update: {
+          call_id?: string
+          invited_at?: string
+          joined_at?: string | null
+          left_at?: string | null
+          state?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_participants_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_participants_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      call_signals: {
+        Row: {
+          call_id: string
+          created_at: string
+          from_user: string
+          id: string
+          kind: string
+          payload: Json
+          to_user: string
+        }
+        Insert: {
+          call_id: string
+          created_at?: string
+          from_user: string
+          id?: string
+          kind: string
+          payload?: Json
+          to_user: string
+        }
+        Update: {
+          call_id?: string
+          created_at?: string
+          from_user?: string
+          id?: string
+          kind?: string
+          payload?: Json
+          to_user?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "call_signals_call_id_fkey"
+            columns: ["call_id"]
+            isOneToOne: false
+            referencedRelation: "calls"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_signals_from_user_fkey"
+            columns: ["from_user"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "call_signals_to_user_fkey"
+            columns: ["to_user"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       calls: {
         Row: {
           caller_id: string
@@ -657,10 +751,12 @@ export type Database = {
         }
         Returns: string
       }
+      decline_call: { Args: { _call: string }; Returns: undefined }
       delete_message_for_everyone: {
         Args: { _mid: string }
         Returns: undefined
       }
+      end_call: { Args: { _call: string }; Returns: undefined }
       friendship_state: {
         Args: { _other: string }
         Returns: {
@@ -696,6 +792,8 @@ export type Database = {
         Args: { _conversation_id: string; _user_id: string }
         Returns: boolean
       }
+      join_call: { Args: { _call: string }; Returns: undefined }
+      leave_call: { Args: { _call: string }; Returns: undefined }
       leave_group: { Args: { _cid: string }; Returns: undefined }
       post_system_message: {
         Args: { _actor: string; _body: string; _cid: string }
@@ -804,6 +902,13 @@ export type Database = {
       set_message_pinned: {
         Args: { _mid: string; _pinned: boolean }
         Returns: undefined
+      }
+      start_call: {
+        Args: {
+          _cid: string
+          _media: Database["public"]["Enums"]["call_media"]
+        }
+        Returns: string
       }
       start_dm: { Args: { _other: string }; Returns: string }
       update_group: {

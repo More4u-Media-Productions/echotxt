@@ -13,6 +13,8 @@ import appCss from "../styles.css?url";
 import { Toaster } from "@/components/ui/sonner";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { SessionProvider } from "@/lib/session";
+import { CallProvider } from "@/lib/calls";
+import { CallLayer } from "@/components/echo/call-overlay";
 
 function NotFoundComponent() {
   return (
@@ -151,9 +153,12 @@ function RootComponent() {
   return (
     <QueryClientProvider client={queryClient}>
       <SessionProvider>
-        {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
-        <Outlet />
-        <Toaster position="top-center" />
+        <CallProvider>
+          {/* Required: nested routes render here. Removing <Outlet /> breaks all child routes. */}
+          <Outlet />
+          <CallLayer />
+          <Toaster position="top-center" />
+        </CallProvider>
       </SessionProvider>
     </QueryClientProvider>
   );

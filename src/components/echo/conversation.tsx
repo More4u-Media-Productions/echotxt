@@ -18,6 +18,7 @@ import { ImageLightbox } from "./attachment-view";
 import { MessageRow } from "./message-row";
 import { VoiceComposer } from "./voice-composer";
 import { cn } from "@/lib/utils";
+import { useCallEngine } from "@/lib/calls";
 import { useUserId, useMyProfile } from "@/lib/session";
 import type { EchoChat, EchoMessage, ReplyPreview } from "@/lib/echo-data";
 import { useOnlineUsers, useTyping } from "@/lib/presence";
@@ -70,6 +71,17 @@ export function Conversation({
   focusMessageId?: string | null;
 }) {
   const userId = useUserId();
+  const { startCall } = useCallEngine();
+  const placeCall = (media: "voice" | "video") =>
+    startCall({
+      conversationId: chat.id,
+      media,
+      title: chat.name,
+      avatar: chat.avatar,
+      avatarUrl: chat.avatarUrl,
+      color: chat.color,
+      isGroup: chat.kind === "group",
+    });
   const myProfile = useMyProfile();
   const messages = useMessages(chat.id);
   const receipts = useReadReceipts(chat.id);
@@ -347,14 +359,14 @@ export function Conversation({
           </>
         )}
         <button
-          onClick={() => onCall?.("voice")}
+          onClick={() => (onCall ? onCall("voice") : void placeCall("voice"))}
           className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-secondary"
           aria-label="Voice call"
         >
           <Phone className="h-[18px] w-[18px]" />
         </button>
         <button
-          onClick={() => onCall?.("video")}
+          onClick={() => (onCall ? onCall("video") : void placeCall("video"))}
           className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-secondary"
           aria-label="Video call"
         >
