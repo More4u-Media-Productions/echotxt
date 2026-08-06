@@ -18,6 +18,7 @@ import { ImageLightbox } from "./attachment-view";
 import { MessageRow } from "./message-row";
 import { VoiceComposer } from "./voice-composer";
 import { cn } from "@/lib/utils";
+import { useCallEngine } from "@/lib/calls";
 import { useUserId, useMyProfile } from "@/lib/session";
 import type { EchoChat, EchoMessage, ReplyPreview } from "@/lib/echo-data";
 import { useOnlineUsers, useTyping } from "@/lib/presence";
