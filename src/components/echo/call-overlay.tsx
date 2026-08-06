@@ -38,7 +38,7 @@ function IncomingCallSheet() {
           <EchoAvatar
             initials={incoming.callerAvatar}
             color={incoming.callerColor}
-            {...(incoming.callerAvatarUrl ? { src: incoming.callerAvatarUrl } : {})}
+            avatarUrl={incoming.callerAvatarUrl}
             size="md"
           />
           <div className="min-w-0 flex-1">
@@ -130,7 +130,7 @@ function ActiveCall() {
           <EchoAvatar
             initials={state.avatar}
             color={state.color}
-            {...(state.avatarUrl ? { src: state.avatarUrl } : {})}
+            avatarUrl={state.avatarUrl}
             size="xl"
           />
           <div>
