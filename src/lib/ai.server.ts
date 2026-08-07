@@ -158,3 +158,19 @@ export async function planSearch(query: string): Promise<SearchPlan> {
         : "Searched your messages.",
   };
 }
+
+/** Resolves a person's name/@username from a search plan to a profile id. */
+export async function resolveSenderId(
+  supabase: Client,
+  name: string | null,
+): Promise<string | null> {
+  if (!name) return null;
+  const clean = name.replace(/^@/, "").trim();
+  if (clean.length < 2) return null;
+  const { data } = await supabase
+    .from("profiles")
+    .select("id, display_name, username")
+    .or(`display_name.ilike.%${clean}%,username.ilike.%${clean}%`)
+    .limit(1);
+  return (data?.[0]?.id as string | undefined) ?? null;
+}
