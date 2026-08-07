@@ -132,6 +132,16 @@ export function Conversation({
   const canPinHere = !isGroup || chat.myRole === "owner" || chat.myRole === "admin";
   const pinnedList = pinned.data ?? [];
 
+  // Boundary used by the AI "Catch me up" mode: the newest message the user
+  // had already read before opening this conversation.
+  const unreadOnOpen = useRef(chat.unread);
+  const lastReadIso = useMemo(() => {
+    const unread = unreadOnOpen.current;
+    if (!unread || list.length === 0) return null;
+    const boundary = list[Math.max(0, list.length - unread) - 1];
+    return boundary?.createdAt ?? null;
+  }, [list]);
+
   const gallery = useMemo(
     () =>
       list
