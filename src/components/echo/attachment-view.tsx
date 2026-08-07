@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
+import { AskFileButton } from "./ai-assistant";
 import type { EchoMessage } from "@/lib/echo-data";
 import {
   attachmentKind,
@@ -262,12 +263,28 @@ export function AttachmentView({
   const name = message.attachmentName ?? "attachment";
   const kind = attachmentKind(message.attachmentType, name);
 
+  const mimeType = message.attachmentType ?? (kind === "pdf" ? "application/pdf" : "application/octet-stream");
+
   if (kind === "image")
-    return <ImageThumb path={path} name={name} onOpen={() => onOpenImage?.(message.id)} />;
+    return (
+      <div>
+        <ImageThumb path={path} name={name} onOpen={() => onOpenImage?.(message.id)} />
+        <AskFileButton path={path} name={name} mimeType={mimeType} />
+      </div>
+    );
   if (kind === "video") return <VideoPlayer path={path} name={name} />;
   if (kind === "audio") return <AudioPlayer path={path} name={name} />;
   return (
-    <DocumentCard path={path} name={name} size={message.attachmentSize} isPdf={kind === "pdf"} />
+    <div>
+      <DocumentCard path={path} name={name} size={message.attachmentSize} isPdf={kind === "pdf"} />
+      {kind === "pdf" || /\.(pdf|txt|md|csv|json)$/i.test(name) ? (
+        <AskFileButton
+          path={path}
+          name={name}
+          mimeType={kind === "pdf" ? "application/pdf" : mimeType}
+        />
+      ) : null}
+    </div>
   );
 }
 

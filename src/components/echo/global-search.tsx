@@ -3,11 +3,12 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
-import { Loader2, Search, X } from "lucide-react";
+import { Loader2, Search, Sparkles, X } from "lucide-react";
 import { toast } from "sonner";
 import { EchoAvatar } from "./avatar";
 import { cn } from "@/lib/utils";
 import { formatBytes } from "@/lib/attachments";
+import { aiErrorMessage, useAiSearchPlan } from "@/lib/ai";
 import { relativeTime } from "@/lib/echo-data";
 import {
   useBookmarks,
@@ -43,11 +44,36 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
   const [media, setMedia] = useState<MediaFilter>("all");
   const inputRef = useRef<HTMLInputElement>(null);
   const startDm = useStartDm();
+  const plan = useAiSearchPlan();
+  const [smart, setSmart] = useState<{ senderId: string | null; from: string | null; note: string } | null>(
+    null,
+  );
+
+  const askAi = () => {
+    const q = term.trim();
+    if (q.length < 2) {
+      toast.error("Describe what you're looking for first.");
+      return;
+    }
+    plan.mutate(q, {
+      onSuccess: (result) => {
+        setTab(result.media === "all" || result.media === "text" ? "messages" : "files");
+        if (result.media !== "all" && result.media !== "text") setMedia(result.media);
+        setTerm(result.terms || q);
+        setSmart({ senderId: result.senderId, from: result.from, note: result.explanation });
+      },
+      onError: (e) => toast.error(aiErrorMessage(e)),
+    });
+  };
 
   const messageFilter = tab === "files" ? (media === "all" ? "all" : media) : "text";
   const messages = useSearchMessages(
     open && (tab === "messages" || tab === "files") ? term : "",
-    { media: tab === "files" ? (media === "all" ? "image" : media) : "all" },
+    {
+      media: tab === "files" ? (media === "all" ? "image" : media) : "all",
+      senderId: smart?.senderId ?? null,
+      from: smart?.from ?? null,
+    },
   );
   const people = useSearchProfiles(open && tab === "people" ? term : "");
   const groups = useSearchGroups(open && tab === "groups" ? term : "");
@@ -109,6 +135,19 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
             className="min-w-0 flex-1 bg-transparent text-sm outline-none placeholder:text-muted-foreground"
           />
           <button
+            onClick={askAi}
+            disabled={plan.isPending}
+            aria-label="Search with Echo AI"
+            title="Search naturally with Echo AI"
+            className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground transition-colors hover:bg-secondary hover:text-primary disabled:opacity-60"
+          >
+            {plan.isPending ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Sparkles className="h-4 w-4" />
+            )}
+          </button>
+          <button
             onClick={onClose}
             aria-label="Close search"
             className="grid h-8 w-8 shrink-0 place-items-center rounded-full text-muted-foreground hover:bg-secondary"
@@ -116,6 +155,19 @@ export function GlobalSearch({ open, onClose }: { open: boolean; onClose: () => 
             <X className="h-4 w-4" />
           </button>
         </div>
+
+        {smart ? (
+          <div className="flex items-center gap-2 border-b border-border bg-primary/5 px-4 py-2">
+            <Sparkles className="h-3.5 w-3.5 shrink-0 text-primary" />
+            <p className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground">{smart.note}</p>
+            <button
+              onClick={() => setSmart(null)}
+              className="shrink-0 text-[11px] font-semibold text-muted-foreground hover:text-foreground"
+            >
+              Clear
+            </button>
+          </div>
+        ) : null}
 
         <div className="flex gap-1.5 overflow-x-auto border-b border-border px-4 py-2.5">
           {TABS.map((t) => (

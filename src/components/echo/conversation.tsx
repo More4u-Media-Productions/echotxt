@@ -8,6 +8,7 @@ import {
   Pin,
   RotateCcw,
   Send,
+  Sparkles,
   Video,
   X,
 } from "lucide-react";
@@ -16,6 +17,7 @@ import { EchoAvatar } from "./avatar";
 import { GroupPanel } from "./group-panel";
 import { ImageLightbox } from "./attachment-view";
 import { MessageRow } from "./message-row";
+import { AiPanel, WritingTools } from "./ai-assistant";
 import { VoiceComposer } from "./voice-composer";
 import { cn } from "@/lib/utils";
 import { useCallEngine } from "@/lib/calls";
@@ -104,6 +106,7 @@ export function Conversation({
   const [highlightId, setHighlightId] = useState<string | null>(null);
   const [pinnedOpen, setPinnedOpen] = useState(false);
   const [sendingVoice, setSendingVoice] = useState(false);
+  const [aiOpen, setAiOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -128,6 +131,16 @@ export function Conversation({
   const postingLocked = isGroup && chat.onlyAdminsPost && chat.myRole === "member";
   const canPinHere = !isGroup || chat.myRole === "owner" || chat.myRole === "admin";
   const pinnedList = pinned.data ?? [];
+
+  // Boundary used by the AI "Catch me up" mode: the newest message the user
+  // had already read before opening this conversation.
+  const unreadOnOpen = useRef(chat.unread);
+  const lastReadIso = useMemo(() => {
+    const unread = unreadOnOpen.current;
+    if (!unread || list.length === 0) return null;
+    const boundary = list[Math.max(0, list.length - unread) - 1];
+    return boundary?.createdAt ?? null;
+  }, [list]);
 
   const gallery = useMemo(
     () =>
@@ -358,6 +371,14 @@ export function Conversation({
             </div>
           </>
         )}
+        <button
+          onClick={() => setAiOpen(true)}
+          className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-secondary hover:text-primary"
+          aria-label="Echo AI assistant"
+          title="Echo AI — summarise or catch up"
+        >
+          <Sparkles className="h-[18px] w-[18px]" />
+        </button>
         <button
           onClick={() => (onCall ? onCall("voice") : void placeCall("voice"))}
           className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-secondary"
@@ -685,6 +706,7 @@ export function Conversation({
               <Paperclip className="h-[18px] w-[18px]" />
             </button>
             <VoiceComposer onSend={(clip) => void sendVoice(clip)} disabled={sendingVoice} />
+            <WritingTools draft={draft} onApply={setDraft} disabled={sendingVoice} />
             <textarea
               ref={textareaRef}
               value={draft}
@@ -718,6 +740,14 @@ export function Conversation({
           </div>
         </form>
       )}
+
+      <AiPanel
+        open={aiOpen}
+        onClose={() => setAiOpen(false)}
+        conversationId={chat.id}
+        conversationName={chat.name}
+        sinceIso={lastReadIso}
+      />
 
       {lightbox !== null ? (
         <ImageLightbox

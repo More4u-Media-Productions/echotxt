@@ -11,20 +11,22 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Echo — private messaging with usernames" },
+      { title: "Echo | Secure Messaging & Communication Platform" },
       {
         name: "description",
         content:
-          "Echo is a private messenger built on @usernames instead of phone numbers. Chats, groups, calls and message requests in one calm app.",
+          "Chat, call, share files, and stay connected with Echo. Secure messaging, group chats, voice & video calling, AI assistance, and powerful search in one communication platform.",
       },
-      { property: "og:title", content: "Echo — private messaging with usernames" },
+      { property: "og:title", content: "Echo | Secure Messaging & Communication Platform" },
       {
         property: "og:description",
-        content: "Echo is a private messenger built on @usernames instead of phone numbers. Chats, groups, calls and message requests in one calm app.",
+        content: "Chat, call, share files, and stay connected with Echo. Secure messaging, group chats, voice & video calling, AI assistance, and powerful search in one communication platform.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
+      { property: "og:url", content: "https://echotxt.lovable.app/" },
     ],
+    links: [{ rel: "canonical", href: "https://echotxt.lovable.app/" }],
   }),
   validateSearch: (search: Record<string, unknown>): { c?: string; m?: string } => {
     const c = search['c'];
