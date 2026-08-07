@@ -80,22 +80,35 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
   head: () => ({
     meta: [
       { charSet: "utf-8" },
-      { name: "viewport", content: "width=device-width, initial-scale=1" },
-      { title: "Echo — private messaging with usernames" },
+      { name: "viewport", content: "width=device-width, initial-scale=1, viewport-fit=cover" },
+      { title: "Echo | Secure Messaging & Communication Platform" },
       {
         name: "description",
-        content: "Echo is a private messenger built on @usernames instead of phone numbers. Chats, groups, calls and message requests in one calm app.",
+        content:
+          "Chat, call, share files, and stay connected with Echo. Secure messaging, group chats, voice & video calling, AI assistance, and powerful search in one communication platform.",
       },
-      { property: "og:title", content: "Echo — private messaging with usernames" },
+      { name: "application-name", content: "Echo" },
+      { name: "apple-mobile-web-app-title", content: "Echo" },
+      { name: "apple-mobile-web-app-capable", content: "yes" },
+      { name: "apple-mobile-web-app-status-bar-style", content: "black-translucent" },
+      { name: "mobile-web-app-capable", content: "yes" },
+      { name: "theme-color", content: "#2bc6c0" },
+      { property: "og:site_name", content: "Echo" },
+      { property: "og:title", content: "Echo | Secure Messaging & Communication Platform" },
       {
         property: "og:description",
-        content: "Echo is a private messenger built on @usernames instead of phone numbers. Chats, groups, calls and message requests in one calm app.",
+        content:
+          "Chat, call, share files, and stay connected with Echo. Secure messaging, group chats, voice & video calling, AI assistance, and powerful search in one communication platform.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       { name: "twitter:site", content: "@Lovable" },
-      { name: "twitter:title", content: "Echo — private messaging with usernames" },
-      { name: "twitter:description", content: "Echo is a private messenger built on @usernames instead of phone numbers. Chats, groups, calls and message requests in one calm app." },
+      { name: "twitter:title", content: "Echo | Secure Messaging & Communication Platform" },
+      {
+        name: "twitter:description",
+        content:
+          "Chat, call, share files, and stay connected with Echo. Secure messaging, group chats, voice & video calling, AI assistance, and powerful search in one communication platform.",
+      },
       { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/420853d1-8a05-4305-9f95-2e0f88e21a35/id-preview-a1d5de3d--adcadf4a-6abf-4d24-b20b-1b66a10805c4.lovable.app-1785702836767.png" },
       { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/420853d1-8a05-4305-9f95-2e0f88e21a35/id-preview-a1d5de3d--adcadf4a-6abf-4d24-b20b-1b66a10805c4.lovable.app-1785702836767.png" },
     ],
@@ -117,7 +130,9 @@ window.OneSignalDeferred.push(async function(OneSignal) {
         rel: "stylesheet",
         href: appCss,
       },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", type: "image/png", href: "/favicon.png" },
+      { rel: "apple-touch-icon", href: "/apple-touch-icon.png" },
+      { rel: "manifest", href: "/manifest.webmanifest" },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },
       { rel: "preconnect", href: "https://fonts.gstatic.com", crossOrigin: "anonymous" },
       {
