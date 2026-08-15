@@ -11,16 +11,16 @@ import { cn } from "@/lib/utils";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Echo | Secure Messaging & Communication Platform" },
+      { title: "Echo | Connect. Communicate. Together." },
       {
         name: "description",
         content:
-          "Chat, call, share files, and stay connected with Echo. Secure messaging, group chats, voice & video calling, AI assistance, and powerful search in one communication platform.",
+          "Echo brings messaging, voice and video calls, groups, media sharing, AI-powered tools, and more together in one modern communication platform. | Made by More4u Productions",
       },
-      { property: "og:title", content: "Echo | Secure Messaging & Communication Platform" },
+      { property: "og:title", content: "Echo | Connect. Communicate. Together." },
       {
         property: "og:description",
-        content: "Chat, call, share files, and stay connected with Echo. Secure messaging, group chats, voice & video calling, AI assistance, and powerful search in one communication platform.",
+        content: "Echo brings messaging, voice and video calls, groups, media sharing, AI-powered tools, and more together in one modern communication platform. | Made by More4u Productions",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },

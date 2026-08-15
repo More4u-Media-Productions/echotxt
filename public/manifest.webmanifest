@@ -1,7 +1,7 @@
 {
-  "name": "Echo | Secure Messaging & Communication Platform",
+  "name": "Echo | Connect. Communicate. Together.",
   "short_name": "Echo",
-  "description": "Chat, call, share files, and stay connected with Echo. Secure messaging, group chats, voice & video calling, AI assistance, and powerful search in one communication platform.",
+  "description": "Echo brings messaging, voice and video calls, groups, media sharing, AI-powered tools, and more together in one modern communication platform. | Made by More4u Productions",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
