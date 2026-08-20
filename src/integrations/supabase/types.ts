@@ -752,6 +752,7 @@ export type Database = {
         Returns: string
       }
       decline_call: { Args: { _call: string }; Returns: undefined }
+      delete_conversation: { Args: { _cid: string }; Returns: undefined }
       delete_message_for_everyone: {
         Args: { _mid: string }
         Returns: undefined
@@ -820,6 +821,7 @@ export type Database = {
           username: string
         }[]
       }
+      purge_conversation: { Args: { _cid: string }; Returns: undefined }
       remove_group_member: {
         Args: { _cid: string; _uid: string }
         Returns: undefined
