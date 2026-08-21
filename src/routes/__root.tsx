@@ -117,21 +117,14 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { src: "https://cdn.onesignal.com/sdks/web/v16/OneSignalSDK.page.js", defer: true },
       {
         children: `window.OneSignalDeferred = window.OneSignalDeferred || [];
-window.OneSignalDeferred.push(async function(OneSignal) {
+OneSignalDeferred.push(async function(OneSignal) {
   await OneSignal.init({
     appId: "${ONESIGNAL_APP_ID}",
-    serviceWorkerPath: "${ONESIGNAL_SW_PATH}",
-    serviceWorkerParam: { scope: "${ONESIGNAL_SW_SCOPE}" },
-    notifyButton: { enable: true },
-    promptOptions: {
-      slidedown: {
-        prompts: [{ type: "push", autoPrompt: true, delay: { pageViews: 1, timeDelay: 8 } }]
-      }
-    }
   });
 });`,
       },
     ],
+
     links: [
       {
         rel: "stylesheet",
