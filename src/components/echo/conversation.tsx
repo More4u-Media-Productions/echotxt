@@ -65,6 +65,7 @@ import {
   useToggleBookmark,
   useToggleReaction,
   useTogglePin,
+  useDeleteConversation,
 } from "@/lib/echo-queries";
 
 const QUICK = ["👍", "❤️", "😂", "🎉", "🙏"];
@@ -125,6 +126,8 @@ export function Conversation({
   const [pinnedOpen, setPinnedOpen] = useState(false);
   const [sendingVoice, setSendingVoice] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const deleteChat = useDeleteConversation();
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
