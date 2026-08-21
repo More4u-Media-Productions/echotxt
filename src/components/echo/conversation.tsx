@@ -8,10 +8,28 @@ import {
   Pin,
   RotateCcw,
   Send,
+  MoreVertical,
   Sparkles,
+  Trash2,
   Video,
   X,
 } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { toast } from "sonner";
 import { EchoAvatar } from "./avatar";
 import { GroupPanel } from "./group-panel";
@@ -47,6 +65,7 @@ import {
   useToggleBookmark,
   useToggleReaction,
   useTogglePin,
+  useDeleteConversation,
 } from "@/lib/echo-queries";
 
 const QUICK = ["👍", "❤️", "😂", "🎉", "🙏"];
@@ -107,6 +126,8 @@ export function Conversation({
   const [pinnedOpen, setPinnedOpen] = useState(false);
   const [sendingVoice, setSendingVoice] = useState(false);
   const [aiOpen, setAiOpen] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const deleteChat = useDeleteConversation();
   const endRef = useRef<HTMLDivElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -393,7 +414,66 @@ export function Conversation({
         >
           <Video className="h-[18px] w-[18px]" />
         </button>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <button
+              className="grid h-9 w-9 place-items-center rounded-full text-muted-foreground hover:bg-secondary"
+              aria-label="Chat options"
+            >
+              <MoreVertical className="h-[18px] w-[18px]" />
+            </button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="w-52">
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onSelect={(event) => {
+                event.preventDefault();
+                setConfirmDelete(true);
+              }}
+            >
+              <Trash2 className="mr-2 h-4 w-4" />
+              {chat.kind === "group" ? "Leave & remove group" : "Delete chat"}
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
       </header>
+
+      <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {chat.kind === "group" ? "Leave this group?" : "Delete this chat?"}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {chat.kind === "group"
+                ? "You'll be removed from the group and it will disappear from your chats."
+                : "This permanently deletes the conversation and every message, attachment and call record in it — for both of you. This can't be undone."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteChat.isPending}>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              disabled={deleteChat.isPending}
+              onClick={(event) => {
+                event.preventDefault();
+                deleteChat.mutate(chat.id, {
+                  onSuccess: () => {
+                    setConfirmDelete(false);
+                    toast.success(chat.kind === "group" ? "You left the group" : "Chat deleted");
+                    onBack?.();
+                  },
+                  onError: (error: unknown) =>
+                    toast.error(
+                      error instanceof Error ? error.message : "Could not delete this chat",
+                    ),
+                });
+              }}
+            >
+              {deleteChat.isPending ? "Deleting…" : chat.kind === "group" ? "Leave" : "Delete"}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       {pinnedList.length ? (
         <div className="border-b border-border bg-surface/40 px-4 py-2">

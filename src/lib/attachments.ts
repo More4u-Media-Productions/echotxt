@@ -3,6 +3,7 @@
 
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { resolveSupabaseUrl, resolveSupabasePublishableKey } from "@/config/supabase";
 
 export const BUCKET = "chat-media";
 export const MAX_FILE_BYTES = 25 * 1024 * 1024; // 25 MB
@@ -94,8 +95,8 @@ export function uploadAttachment(options: {
         reject(new Error("You need to be signed in to upload files."));
         return;
       }
-      const baseUrl = import.meta.env['VITE_SUPABASE_URL'] as string;
-      const apiKey = import.meta.env['VITE_SUPABASE_PUBLISHABLE_KEY'] as string;
+      const baseUrl = resolveSupabaseUrl();
+      const apiKey = resolveSupabasePublishableKey();
       const xhr = new XMLHttpRequest();
       xhr.open("POST", `${baseUrl}/storage/v1/object/${BUCKET}/${path}`);
       xhr.setRequestHeader("Authorization", `Bearer ${token}`);

@@ -3,7 +3,7 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/integrations/supabase/types";
 
-const ONESIGNAL_APP_ID = "4b504597-989a-4574-8bc9-aedb018005c2";
+import { ONESIGNAL_APP_ID } from "@/config/onesignal";
 
 export interface PrefRow {
   user_id: string;
