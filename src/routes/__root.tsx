@@ -15,6 +15,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { SessionProvider } from "@/lib/session";
 import { CallProvider } from "@/lib/calls";
 import { CallLayer } from "@/components/echo/call-overlay";
+import { ONESIGNAL_APP_ID, ONESIGNAL_SW_PATH, ONESIGNAL_SW_SCOPE } from "@/config/onesignal";
 
 function NotFoundComponent() {
   return (
@@ -118,9 +119,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         children: `window.OneSignalDeferred = window.OneSignalDeferred || [];
 window.OneSignalDeferred.push(async function(OneSignal) {
   await OneSignal.init({
-    appId: "4b504597-989a-4574-8bc9-aedb018005c2",
-    safari_web_id: "web.onesignal.auto.5d56d362-2565-48e1-9c7d-b5c325eeeb04",
+    appId: "${ONESIGNAL_APP_ID}",
+    serviceWorkerPath: "${ONESIGNAL_SW_PATH}",
+    serviceWorkerParam: { scope: "${ONESIGNAL_SW_SCOPE}" },
     notifyButton: { enable: true },
+    promptOptions: {
+      slidedown: {
+        prompts: [{ type: "push", autoPrompt: true, delay: { pageViews: 1, timeDelay: 8 } }]
+      }
+    }
   });
 });`,
       },
