@@ -870,6 +870,27 @@ export function useLeaveChat() {
   });
 }
 
+/**
+ * Permanently deletes a conversation server-side. DMs are removed for both
+ * people (messages, reactions, pins, saved items, attachments and call records
+ * included); groups simply drop the caller via leave_group.
+ */
+export function useDeleteConversation() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (conversationId: string) => {
+      const { error } = await supabase.rpc("delete_conversation", { _cid: conversationId });
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["chats"] });
+      void queryClient.invalidateQueries({ queryKey: ["messages"] });
+      void queryClient.invalidateQueries({ queryKey: ["notifications"] });
+    },
+  });
+}
+
+
 /* ------------------------------ create conversations ------------------------- */
 
 export function useStartDm() {
