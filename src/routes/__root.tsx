@@ -15,7 +15,7 @@ import { reportLovableError } from "../lib/lovable-error-reporting";
 import { SessionProvider } from "@/lib/session";
 import { CallProvider } from "@/lib/calls";
 import { CallLayer } from "@/components/echo/call-overlay";
-import { ONESIGNAL_APP_ID, ONESIGNAL_SW_PATH, ONESIGNAL_SW_SCOPE } from "@/config/onesignal";
+import { ONESIGNAL_APP_ID } from "@/config/onesignal";
 
 function NotFoundComponent() {
   return (
